@@ -186,6 +186,128 @@ export default function NewLeadPage() {
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
+                    <Label htmlFor="first_name">First Name *</Label>
+                    <Input
+                      id="first_name"
+                      placeholder="John"
+                      {...register('first_name')}
+                    />
+                    {errors.first_name && (
+                      <p className="text-sm text-destructive">{errors.first_name.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="last_name">Last Name *</Label>
+                    <Input
+                      id="last_name"
+                      placeholder="Doe"
+                      {...register('last_name')}
+                    />
+                    {errors.last_name && (
+                      <p className="text-sm text-destructive">{errors.last_name.message}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email *</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="john@company.com"
+                    {...register('email')}
+                  />
+                  {errors.email && (
+                    <p className="text-sm text-destructive">{errors.email.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input
+                    id="phone"
+                    placeholder="+977-9860909101"
+                    {...register('phone')}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="job_title">Job Title *</Label>
+                  <Input
+                    id="job_title"
+                    placeholder="Head of Data"
+                    {...register('job_title')}
+                  />
+                  {errors.job_title && (
+                    <p className="text-sm text-destructive">{errors.job_title.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="seniority_level">Seniority Level *</Label>
+                  <Select onValueChange={(value) => setValue('seniority_level', value as any)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="C-Level">C-Level</SelectItem>
+                      <SelectItem value="VP/Director">VP/Director</SelectItem>
+                      <SelectItem value="Manager">Manager</SelectItem>
+                      <SelectItem value="Individual Contributor">Individual Contributor</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {errors.seniority_level && (
+                    <p className="text-sm text-destructive">{errors.seniority_level.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="linkedin_url">LinkedIn Profile URL</Label>
+                  <Input
+                    id="linkedin_url"
+                    type="url"
+                    placeholder="https://linkedin.com/in/johndoe"
+                    {...register('linkedin_url')}
+                  />
+                  {errors.linkedin_url && (
+                    <p className="text-sm text-destructive">{errors.linkedin_url.message}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Company Information */}
+            {step === 2 && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Company Information</h3>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="company_name">Company Name *</Label>
+                  <Input
+                    id="company_name"
+                    placeholder="Acme Corp"
+                    {...register('company_name')}
+                  />
+                  {errors.company_name && (
+                    <p className="text-sm text-destructive">{errors.company_name.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="company_website">Company Website *</Label>
+                  <Input
+                    id="company_website"
+                    type="url"
+                    placeholder="https://acmecorp.com"
+                    {...register('company_website')}
+                  />
+                  {errors.company_website && (
+                    <p className="text-sm text-destructive">{errors.company_website.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="company_size">Company Size *</Label>
                   <Select onValueChange={(value) => setValue('company_size', value as any)}>
                     <SelectTrigger>
@@ -360,126 +482,3 @@ export default function NewLeadPage() {
     </div>
   )
 }
-">
-                    <Label htmlFor="first_name">First Name *</Label>
-                    <Input
-                      id="first_name"
-                      placeholder="John"
-                      {...register('first_name')}
-                    />
-                    {errors.first_name && (
-                      <p className="text-sm text-destructive">{errors.first_name.message}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="last_name">Last Name *</Label>
-                    <Input
-                      id="last_name"
-                      placeholder="Doe"
-                      {...register('last_name')}
-                    />
-                    {errors.last_name && (
-                      <p className="text-sm text-destructive">{errors.last_name.message}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email *</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="john@company.com"
-                    {...register('email')}
-                  />
-                  {errors.email && (
-                    <p className="text-sm text-destructive">{errors.email.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone</Label>
-                  <Input
-                    id="phone"
-                    placeholder="+977-9860909101"
-                    {...register('phone')}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="job_title">Job Title *</Label>
-                  <Input
-                    id="job_title"
-                    placeholder="Head of Data"
-                    {...register('job_title')}
-                  />
-                  {errors.job_title && (
-                    <p className="text-sm text-destructive">{errors.job_title.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="seniority_level">Seniority Level *</Label>
-                  <Select onValueChange={(value) => setValue('seniority_level', value as any)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select level" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="C-Level">C-Level</SelectItem>
-                      <SelectItem value="VP/Director">VP/Director</SelectItem>
-                      <SelectItem value="Manager">Manager</SelectItem>
-                      <SelectItem value="Individual Contributor">Individual Contributor</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {errors.seniority_level && (
-                    <p className="text-sm text-destructive">{errors.seniority_level.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="linkedin_url">LinkedIn Profile URL</Label>
-                  <Input
-                    id="linkedin_url"
-                    type="url"
-                    placeholder="https://linkedin.com/in/johndoe"
-                    {...register('linkedin_url')}
-                  />
-                  {errors.linkedin_url && (
-                    <p className="text-sm text-destructive">{errors.linkedin_url.message}</p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Step 2: Company Information */}
-            {step === 2 && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Company Information</h3>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="company_name">Company Name *</Label>
-                  <Input
-                    id="company_name"
-                    placeholder="Acme Corp"
-                    {...register('company_name')}
-                  />
-                  {errors.company_name && (
-                    <p className="text-sm text-destructive">{errors.company_name.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="company_website">Company Website *</Label>
-                  <Input
-                    id="company_website"
-                    type="url"
-                    placeholder="https://acmecorp.com"
-                    {...register('company_website')}
-                  />
-                  {errors.company_website && (
-                    <p className="text-sm text-destructive">{errors.company_website.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2
