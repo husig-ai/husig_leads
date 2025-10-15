@@ -1,3 +1,4 @@
+// src/app/(dashboard)/leads/[id]/page.tsx - COMPLETE UPDATED VERSION
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -7,19 +8,20 @@ import { createClient } from '@/lib/supabase/client'
 import { Lead } from '@/types/database'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ArrowLeft, Edit, Trash2, ExternalLink, Mail, Phone, Linkedin } from 'lucide-react'
 import { formatDateTime } from '@/lib/utils'
 import { getLeadScoreBadge, getStatusBadgeColor } from '@/lib/validations/lead'
+
+// Import the new components
+import StatusSelector from '@/components/leads/StatusSelector'
+import NotesSystem from '@/components/leads/NotesSystem'
+import ActivityTimeline from '@/components/leads/ActivityTimeline'
 
 export default function LeadDetailPage() {
   const router = useRouter()
   const params = useParams()
   const [lead, setLead] = useState<Lead | null>(null)
-  const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (params.id) {
@@ -37,7 +39,6 @@ export default function LeadDetailPage() {
 
     if (data) {
       setLead(data)
-      setNotes(data.notes || '')
     } else if (error) {
       console.error(error)
       router.push('/leads')
@@ -45,33 +46,9 @@ export default function LeadDetailPage() {
     setLoading(false)
   }
 
-  const handleStatusChange = async (newStatus: string) => {
-    if (!lead) return
-
-    const supabase = createClient()
-    const { error } = await supabase
-      .from('leads')
-      .update({ lead_status: newStatus })
-      .eq('id', lead.id)
-
-    if (!error) {
+  const handleStatusChange = (newStatus: string) => {
+    if (lead) {
       setLead({ ...lead, lead_status: newStatus as any })
-    }
-  }
-
-  const handleNotesUpdate = async () => {
-    if (!lead) return
-
-    setSaving(true)
-    const supabase = createClient()
-    const { error } = await supabase
-      .from('leads')
-      .update({ notes })
-      .eq('id', lead.id)
-
-    setSaving(false)
-    if (!error) {
-      setLead({ ...lead, notes })
     }
   }
 
@@ -144,7 +121,7 @@ export default function LeadDetailPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column */}
+        {/* Left Column - 2/3 width */}
         <div className="lg:col-span-2 space-y-6">
           {/* Contact Information */}
           <Card>
@@ -154,58 +131,61 @@ export default function LeadDetailPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">First Name</p>
-                  <p className="text-base">{lead.first_name}</p>
+                  <p className="text-sm font-medium text-muted-foreground">Name</p>
+                  <p className="text-base">{lead.first_name} {lead.last_name}</p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Last Name</p>
-                  <p className="text-base">{lead.last_name}</p>
+                  <p className="text-sm font-medium text-muted-foreground">Job Title</p>
+                  <p className="text-base">{lead.job_title}</p>
                 </div>
               </div>
 
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Email</p>
-                <a href={`mailto:${lead.email}`} className="text-base text-primary hover:underline flex items-center">
-                  <Mail className="h-4 w-4 mr-2" />
-                  {lead.email}
-                </a>
-              </div>
-
-              {lead.phone && (
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Phone</p>
-                  <a href={`tel:${lead.phone}`} className="text-base text-primary hover:underline flex items-center">
-                    <Phone className="h-4 w-4 mr-2" />
-                    {lead.phone}
-                  </a>
-                </div>
-              )}
-
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Job Title</p>
-                <p className="text-base">{lead.job_title}</p>
-              </div>
-
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Seniority Level</p>
-                <p className="text-base">{lead.seniority_level}</p>
-              </div>
-
-              {lead.linkedin_url && (
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">LinkedIn Profile</p>
+                  <p className="text-sm font-medium text-muted-foreground">Email</p>
                   <a 
-                    href={lead.linkedin_url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
+                    href={`mailto:${lead.email}`}
                     className="text-base text-primary hover:underline flex items-center"
                   >
-                    <Linkedin className="h-4 w-4 mr-2" />
-                    View Profile
-                    <ExternalLink className="h-3 w-3 ml-1" />
+                    <Mail className="h-4 w-4 mr-2" />
+                    {lead.email}
                   </a>
                 </div>
-              )}
+                {lead.phone && (
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Phone</p>
+                    <a 
+                      href={`tel:${lead.phone}`}
+                      className="text-base text-primary hover:underline flex items-center"
+                    >
+                      <Phone className="h-4 w-4 mr-2" />
+                      {lead.phone}
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Seniority Level</p>
+                  <p className="text-base">{lead.seniority_level}</p>
+                </div>
+                {lead.linkedin_url && (
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">LinkedIn</p>
+                    <a 
+                      href={lead.linkedin_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-base text-primary hover:underline flex items-center"
+                    >
+                      <Linkedin className="h-4 w-4 mr-2" />
+                      View Profile
+                      <ExternalLink className="h-3 w-3 ml-1" />
+                    </a>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -291,26 +271,14 @@ export default function LeadDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Notes */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Notes</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Add notes about this lead..."
-                rows={6}
-              />
-              <Button onClick={handleNotesUpdate} disabled={saving}>
-                {saving ? 'Saving...' : 'Save Notes'}
-              </Button>
-            </CardContent>
-          </Card>
+          {/* NEW: Notes System - Replace old textarea */}
+          <NotesSystem leadId={lead.id} />
+
+          {/* NEW: Activity Timeline */}
+          <ActivityTimeline leadId={lead.id} />
         </div>
 
-        {/* Right Column */}
+        {/* Right Column - 1/3 width */}
         <div className="space-y-6">
           {/* Lead Management */}
           <Card>
@@ -320,20 +288,12 @@ export default function LeadDetailPage() {
             <CardContent className="space-y-4">
               <div>
                 <p className="text-sm font-medium text-muted-foreground mb-2">Status</p>
-                <Select value={lead.lead_status} onValueChange={handleStatusChange}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="New">New</SelectItem>
-                    <SelectItem value="Contacted">Contacted</SelectItem>
-                    <SelectItem value="Qualified">Qualified</SelectItem>
-                    <SelectItem value="Demo Scheduled">Demo Scheduled</SelectItem>
-                    <SelectItem value="Proposal Sent">Proposal Sent</SelectItem>
-                    <SelectItem value="Won">Won</SelectItem>
-                    <SelectItem value="Lost">Lost</SelectItem>
-                  </SelectContent>
-                </Select>
+                {/* NEW: StatusSelector with save button */}
+                <StatusSelector 
+                  leadId={lead.id}
+                  currentStatus={lead.lead_status}
+                  onStatusChange={handleStatusChange}
+                />
               </div>
 
               <div>
@@ -355,33 +315,6 @@ export default function LeadDetailPage() {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Last Updated</p>
                 <p className="text-sm">{formatDateTime(lead.updated_at)}</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Activity Timeline */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Activity Timeline</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-start space-x-3">
-                  <div className="w-2 h-2 mt-2 rounded-full bg-blue-500" />
-                  <div>
-                    <p className="text-sm font-medium">Lead Created</p>
-                    <p className="text-xs text-muted-foreground">{formatDateTime(lead.created_at)}</p>
-                  </div>
-                </div>
-                {lead.updated_at !== lead.created_at && (
-                  <div className="flex items-start space-x-3">
-                    <div className="w-2 h-2 mt-2 rounded-full bg-green-500" />
-                    <div>
-                      <p className="text-sm font-medium">Lead Updated</p>
-                      <p className="text-xs text-muted-foreground">{formatDateTime(lead.updated_at)}</p>
-                    </div>
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>
