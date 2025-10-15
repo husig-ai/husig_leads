@@ -132,3 +132,104 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_new_user();
+
+  -- Create activities table for tracking lead interactions
+CREATE TABLE IF NOT EXISTS activities (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_id UUID REFERENCES leads(id) ON DELETE CASCADE NOT NULL,
+  activity_type TEXT CHECK (activity_type IN (
+    'status_changed',
+    'note_added',
+    'email_sent',
+    'call_made',
+    'meeting_scheduled',
+    'meeting_completed',
+    'document_sent',
+    'follow_up_scheduled',
+    'lead_updated'
+  )) NOT NULL,
+  description TEXT NOT NULL,
+  metadata JSONB, -- Store additional data like old/new values
+  created_by UUID REFERENCES auth.users(id) NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create index for better query performance
+CREATE INDEX idx_activities_lead_id ON activities(lead_id);
+CREATE INDEX idx_activities_created_at ON activities(created_at DESC);
+CREATE INDEX idx_activities_type ON activities(activity_type);
+
+-- Enable Row Level Security
+ALTER TABLE activities ENABLE ROW LEVEL SECURITY;
+
+-- Activities RLS Policies (similar to leads)
+CREATE POLICY "Users can view activities for their leads or all if admin/manager"
+  ON activities FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM leads 
+      WHERE leads.id = activities.lead_id 
+      AND (
+        leads.created_by = auth.uid() 
+        OR 
+        EXISTS (
+          SELECT 1 FROM profiles 
+          WHERE profiles.id = auth.uid() 
+          AND profiles.role IN ('admin', 'manager')
+        )
+      )
+    )
+  );
+
+CREATE POLICY "Users can insert activities"
+  ON activities FOR INSERT
+  WITH CHECK (auth.uid() = created_by);
+
+-- Function to automatically create activity when lead status changes
+CREATE OR REPLACE FUNCTION log_lead_status_change()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF OLD.lead_status IS DISTINCT FROM NEW.lead_status THEN
+    INSERT INTO activities (lead_id, activity_type, description, metadata, created_by)
+    VALUES (
+      NEW.id,
+      'status_changed',
+      format('Status changed from %s to %s', OLD.lead_status, NEW.lead_status),
+      jsonb_build_object(
+        'old_status', OLD.lead_status,
+        'new_status', NEW.lead_status
+      ),
+      auth.uid()
+    );
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger for status changes
+CREATE TRIGGER lead_status_change_trigger
+  AFTER UPDATE ON leads
+  FOR EACH ROW
+  EXECUTE FUNCTION log_lead_status_change();
+
+-- Function to log when lead is created
+CREATE OR REPLACE FUNCTION log_lead_creation()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO activities (lead_id, activity_type, description, metadata, created_by)
+  VALUES (
+    NEW.id,
+    'lead_updated',
+    'Lead created',
+    jsonb_build_object('lead_score', NEW.lead_score),
+    NEW.created_by
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger for lead creation
+CREATE TRIGGER lead_creation_trigger
+  AFTER INSERT ON leads
+  FOR EACH ROW
+  EXECUTE FUNCTION log_lead_creation();
