@@ -34,26 +34,47 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
     loadNotes()
   }, [leadId])
 
-  const loadNotes = async () => {
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from('notes')
-      .select(`
-        *,
-        profiles:created_by (full_name)
-      `)
-      .eq('lead_id', leadId)
-      .order('created_at', { ascending: false })
+const loadNotes = async () => {
+  const supabase = createClient()
+  
+  // Get notes
+  const { data, error } = await supabase
+    .from('notes')
+    .select('*')
+    .eq('lead_id', leadId)
+    .order('created_at', { ascending: false })
 
-    if (data) {
-      const notesWithNames = data.map((note: any) => ({
-        ...note,
-        user_name: note.profiles?.full_name || 'Unknown User'
-      }))
-      setNotes(notesWithNames)
-    }
+  if (error) {
+    console.error('Error loading notes:', error)
     setLoading(false)
+    return
   }
+
+  if (data && data.length > 0) {
+    // Get unique user IDs
+    const userIds = [...new Set(data.map(note => note.created_by))]
+    
+    // Fetch user names
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', userIds)
+
+    // Map user names to notes
+    const profileMap = new Map(profiles?.map(p => [p.id, p.full_name]) || [])
+    
+    const notesWithNames = data.map(note => ({
+      ...note,
+      user_name: profileMap.get(note.created_by) || 'Unknown User'
+    }))
+    
+    setNotes(notesWithNames)
+  } else {
+    setNotes([])
+  }
+  
+  setLoading(false)
+}
 
   const handleAddNote = async () => {
     if (!newNoteContent.trim()) return
@@ -77,6 +98,7 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
       setNewNoteContent('')
       loadNotes()
     }
+    
   }
 
   const handleStartEdit = (note: Note) => {

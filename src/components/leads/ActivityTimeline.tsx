@@ -1,13 +1,9 @@
-// src/components/leads/ActivityTimeline.tsx - IMPROVED VERSION
+// src/components/leads/ActivityTimeline.tsx - READ-ONLY VERSION
 'use client'
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { 
   MessageSquare, 
   Phone, 
@@ -16,7 +12,9 @@ import {
   FileText, 
   CheckCircle2,
   Clock,
-  TrendingUp
+  TrendingUp,
+  Edit,
+  UserPlus
 } from 'lucide-react'
 
 interface Activity {
@@ -39,7 +37,8 @@ const ACTIVITY_ICONS: Record<string, any> = {
   meeting_completed: CheckCircle2,
   document_sent: FileText,
   follow_up_scheduled: Clock,
-  lead_updated: TrendingUp,
+  lead_updated: Edit,
+  lead_created: UserPlus,
 }
 
 const ACTIVITY_COLORS: Record<string, string> = {
@@ -52,6 +51,7 @@ const ACTIVITY_COLORS: Record<string, string> = {
   document_sent: 'text-pink-500 bg-pink-100 dark:bg-pink-900',
   follow_up_scheduled: 'text-yellow-500 bg-yellow-100 dark:bg-yellow-900',
   lead_updated: 'text-gray-500 bg-gray-100 dark:bg-gray-800',
+  lead_created: 'text-green-500 bg-green-100 dark:bg-green-900',
 }
 
 interface ActivityTimelineProps {
@@ -61,15 +61,11 @@ interface ActivityTimelineProps {
 export default function ActivityTimeline({ leadId }: ActivityTimelineProps) {
   const [activities, setActivities] = useState<Activity[]>([])
   const [loading, setLoading] = useState(true)
-  const [showAddActivity, setShowAddActivity] = useState(false)
-  const [activityType, setActivityType] = useState<string>('note_added')
-  const [activityDescription, setActivityDescription] = useState('')
-  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     loadActivities()
     
-    // Set up real-time subscription
+    // Set up real-time subscription for automatic updates
     const supabase = createClient()
     const channel = supabase
       .channel(`activities-${leadId}`)
@@ -93,51 +89,46 @@ export default function ActivityTimeline({ leadId }: ActivityTimelineProps) {
   }, [leadId])
 
   const loadActivities = async () => {
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from('activities')
-      .select(`
-        *,
-        profiles:created_by (full_name)
-      `)
-      .eq('lead_id', leadId)
-      .order('created_at', { ascending: false })
+  const supabase = createClient()
+  
+  // Get activities
+  const { data, error } = await supabase
+    .from('activities')
+    .select('*')
+    .eq('lead_id', leadId)
+    .order('created_at', { ascending: false })
 
-    if (data) {
-      const activitiesWithNames = data.map((activity: any) => ({
-        ...activity,
-        user_name: activity.profiles?.full_name || 'Unknown User'
-      }))
-      setActivities(activitiesWithNames)
-    }
+  if (error) {
+    console.error('Error loading activities:', error)
     setLoading(false)
+    return
   }
 
-  const handleAddActivity = async () => {
-    if (!activityDescription.trim()) return
+  if (data && data.length > 0) {
+    // Get unique user IDs
+    const userIds = [...new Set(data.map(activity => activity.created_by))]
+    
+    // Fetch user names
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', userIds)
 
-    setSaving(true)
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) return
-
-    const { error } = await supabase
-      .from('activities')
-      .insert({
-        lead_id: leadId,
-        activity_type: activityType,
-        description: activityDescription,
-        created_by: user.id,
-      })
-
-    setSaving(false)
-    if (!error) {
-      setActivityDescription('')
-      setShowAddActivity(false)
-      loadActivities()
-    }
+    // Map user names to activities
+    const profileMap = new Map(profiles?.map(p => [p.id, p.full_name]) || [])
+    
+    const activitiesWithNames = data.map(activity => ({
+      ...activity,
+      user_name: profileMap.get(activity.created_by) || 'System'
+    }))
+    
+    setActivities(activitiesWithNames)
+  } else {
+    setActivities([])
   }
+  
+  setLoading(false)
+}
 
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString)
@@ -163,67 +154,21 @@ export default function ActivityTimeline({ leadId }: ActivityTimelineProps) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>Activity Timeline</CardTitle>
-          <Button
-            size="sm"
-            onClick={() => setShowAddActivity(!showAddActivity)}
-          >
-            {showAddActivity ? 'Cancel' : 'Add Activity'}
-          </Button>
-        </div>
+        <CardTitle>Activity Log</CardTitle>
+        <p className="text-sm text-muted-foreground">Automatic timeline of all lead activities</p>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Add Activity Form */}
-        {showAddActivity && (
-          <div className="space-y-3 p-4 border rounded-lg bg-gray-50 dark:bg-gray-900">
-            <div className="space-y-2">
-              <Label htmlFor="activity_type">Activity Type</Label>
-              <Select value={activityType} onValueChange={setActivityType}>
-                <SelectTrigger id="activity_type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="note_added">Note</SelectItem>
-                  <SelectItem value="email_sent">Email Sent</SelectItem>
-                  <SelectItem value="call_made">Call Made</SelectItem>
-                  <SelectItem value="meeting_scheduled">Meeting Scheduled</SelectItem>
-                  <SelectItem value="meeting_completed">Meeting Completed</SelectItem>
-                  <SelectItem value="document_sent">Document Sent</SelectItem>
-                  <SelectItem value="follow_up_scheduled">Follow-up Scheduled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Add details about this activity..."
-                rows={3}
-                value={activityDescription}
-                onChange={(e) => setActivityDescription(e.target.value)}
-              />
-            </div>
-
-            <Button
-              onClick={handleAddActivity}
-              disabled={saving || !activityDescription.trim()}
-              className="w-full"
-            >
-              {saving ? 'Saving...' : 'Add Activity'}
-            </Button>
-          </div>
-        )}
-
-        {/* Activity List */}
+      <CardContent>
         {loading ? (
-          <div className="text-center py-4">
+          <div className="text-center py-8">
             <p className="text-sm text-muted-foreground">Loading activities...</p>
           </div>
         ) : activities.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-sm text-muted-foreground">No activities yet</p>
+          <div className="text-center py-8 border rounded-lg border-dashed">
+            <Clock className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+            <p className="text-sm text-muted-foreground">No activity yet</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Activities will appear here when you make changes
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -256,18 +201,23 @@ export default function ActivityTimeline({ leadId }: ActivityTimelineProps) {
                       </div>
                     </div>
 
-                    {/* Metadata - Show status changes */}
+                    {/* Metadata - Show status changes with visual badges */}
                     {activity.metadata && Object.keys(activity.metadata).length > 0 && (
-                      <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-900 rounded text-xs">
+                      <div className="mt-2 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border text-xs">
                         {activity.activity_type === 'status_changed' && (
                           <div className="flex items-center gap-2">
                             <span className="px-2 py-1 rounded bg-gray-200 dark:bg-gray-700 font-medium">
                               {activity.metadata.old_status}
                             </span>
-                            <span>→</span>
+                            <span className="text-muted-foreground">→</span>
                             <span className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-medium">
                               {activity.metadata.new_status}
                             </span>
+                          </div>
+                        )}
+                        {activity.activity_type === 'lead_updated' && activity.metadata.lead_score && (
+                          <div className="text-muted-foreground">
+                            Lead score: <span className="font-medium">{activity.metadata.lead_score}</span>
                           </div>
                         )}
                       </div>

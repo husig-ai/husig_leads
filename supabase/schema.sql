@@ -1,12 +1,13 @@
 -- ============================================================================
 -- HUSIG LEAD MANAGEMENT PLATFORM - COMPLETE DATABASE SCHEMA
+-- Final Version with All Activity Logging
 -- ============================================================================
 
 -- Drop existing tables (only if starting fresh)
 -- Uncomment these lines if you want to completely reset the database
-DROP TABLE IF EXISTS notes CASCADE;
-DROP TABLE IF EXISTS activities CASCADE;
-DROP TABLE IF EXISTS leads CASCADE;
+-- DROP TABLE IF EXISTS notes CASCADE;
+-- DROP TABLE IF EXISTS activities CASCADE;
+-- DROP TABLE IF EXISTS leads CASCADE;
 -- DROP TABLE IF EXISTS profiles CASCADE;
 
 -- ============================================================================
@@ -81,7 +82,8 @@ CREATE TABLE IF NOT EXISTS activities (
     'meeting_completed',
     'document_sent',
     'follow_up_scheduled',
-    'lead_updated'
+    'lead_updated',
+    'lead_created'
   )) NOT NULL,
   description TEXT NOT NULL,
   metadata JSONB,
@@ -168,7 +170,7 @@ BEGIN
         'old_status', OLD.lead_status,
         'new_status', NEW.lead_status
       ),
-      auth.uid()
+      COALESCE(auth.uid(), NEW.created_by)
     );
   END IF;
   RETURN NEW;
@@ -182,11 +184,77 @@ BEGIN
   INSERT INTO activities (lead_id, activity_type, description, metadata, created_by)
   VALUES (
     NEW.id,
-    'lead_updated',
+    'lead_created',
     'Lead created',
     jsonb_build_object('lead_score', NEW.lead_score),
     NEW.created_by
   );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function: Log when notes are added
+CREATE OR REPLACE FUNCTION log_note_added()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO activities (lead_id, activity_type, description, created_by)
+  VALUES (
+    NEW.lead_id,
+    'note_added',
+    'Added a note',
+    NEW.created_by
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function: Log when lead fields are updated
+CREATE OR REPLACE FUNCTION log_lead_update()
+RETURNS TRIGGER AS $$
+DECLARE
+  changes TEXT[];
+BEGIN
+  changes := ARRAY[]::TEXT[];
+  
+  -- Track which fields changed
+  IF OLD.first_name IS DISTINCT FROM NEW.first_name OR OLD.last_name IS DISTINCT FROM NEW.last_name THEN
+    changes := array_append(changes, 'contact info');
+  END IF;
+  
+  IF OLD.email IS DISTINCT FROM NEW.email OR OLD.phone IS DISTINCT FROM NEW.phone THEN
+    changes := array_append(changes, 'contact details');
+  END IF;
+  
+  IF OLD.company_name IS DISTINCT FROM NEW.company_name OR 
+     OLD.company_website IS DISTINCT FROM NEW.company_website OR
+     OLD.company_size IS DISTINCT FROM NEW.company_size OR
+     OLD.industry IS DISTINCT FROM NEW.industry THEN
+    changes := array_append(changes, 'company info');
+  END IF;
+  
+  IF OLD.service_interest IS DISTINCT FROM NEW.service_interest OR
+     OLD.pain_point IS DISTINCT FROM NEW.pain_point OR
+     OLD.project_timeline IS DISTINCT FROM NEW.project_timeline OR
+     OLD.budget_range IS DISTINCT FROM NEW.budget_range THEN
+    changes := array_append(changes, 'project details');
+  END IF;
+  
+  IF OLD.lead_score IS DISTINCT FROM NEW.lead_score THEN
+    changes := array_append(changes, 'lead score');
+  END IF;
+  
+  -- Only log if something changed (and ignore status changes, that has its own trigger)
+  IF array_length(changes, 1) > 0 AND OLD.lead_status = NEW.lead_status THEN
+    INSERT INTO activities (lead_id, activity_type, description, metadata, created_by)
+    VALUES (
+      NEW.id,
+      'lead_updated',
+      format('Updated %s', array_to_string(changes, ', ')),
+      jsonb_build_object('changes', changes),
+      COALESCE(auth.uid(), NEW.created_by)
+    );
+  END IF;
+  
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -229,6 +297,20 @@ CREATE TRIGGER lead_creation_trigger
   AFTER INSERT ON leads
   FOR EACH ROW
   EXECUTE FUNCTION log_lead_creation();
+
+-- Trigger: Log when notes are added
+DROP TRIGGER IF EXISTS note_added_trigger ON notes;
+CREATE TRIGGER note_added_trigger
+  AFTER INSERT ON notes
+  FOR EACH ROW
+  EXECUTE FUNCTION log_note_added();
+
+-- Trigger: Log lead updates
+DROP TRIGGER IF EXISTS lead_update_trigger ON leads;
+CREATE TRIGGER lead_update_trigger
+  AFTER UPDATE ON leads
+  FOR EACH ROW
+  EXECUTE FUNCTION log_lead_update();
 
 -- ============================================================================
 -- ROW LEVEL SECURITY (RLS)
@@ -379,8 +461,8 @@ CREATE POLICY "Users can delete their own notes"
 
 -- SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;
 -- SELECT indexname FROM pg_indexes WHERE schemaname = 'public' ORDER BY indexname;
--- SELECT proname FROM pg_proc WHERE proname LIKE '%lead%' OR proname LIKE '%profile%';
--- SELECT tgname FROM pg_trigger WHERE tgname LIKE '%lead%' OR tgname LIKE '%profile%';
+-- SELECT proname FROM pg_proc WHERE proname LIKE '%lead%' OR proname LIKE '%profile%' OR proname LIKE '%note%';
+-- SELECT tgname FROM pg_trigger WHERE tgname LIKE '%lead%' OR tgname LIKE '%profile%' OR tgname LIKE '%note%';
 
 -- ============================================================================
 -- END OF SCHEMA
