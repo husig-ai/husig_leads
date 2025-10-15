@@ -1,3 +1,4 @@
+// src/app/(dashboard)/leads/[id]/edit/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -36,6 +37,7 @@ export default function EditLeadPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [lead, setLead] = useState<Lead | null>(null)
 
   const {
     register,
@@ -48,6 +50,12 @@ export default function EditLeadPage() {
   })
 
   const serviceInterest = watch('service_interest') || []
+  const seniorityLevel = watch('seniority_level')
+  const companySize = watch('company_size')
+  const industry = watch('industry')
+  const projectTimeline = watch('project_timeline')
+  const budgetRange = watch('budget_range')
+  const leadSource = watch('lead_source')
 
   useEffect(() => {
     if (params.id) {
@@ -64,12 +72,25 @@ export default function EditLeadPage() {
       .single()
 
     if (data) {
-      // Pre-populate form with existing lead data
-      Object.keys(data).forEach((key) => {
-        if (key in leadSchema.shape) {
-          setValue(key as keyof LeadFormData, data[key as keyof Lead])
-        }
-      })
+      setLead(data)
+      
+      // Pre-populate all form fields
+      setValue('first_name', data.first_name)
+      setValue('last_name', data.last_name)
+      setValue('email', data.email)
+      setValue('phone', data.phone || '')
+      setValue('job_title', data.job_title)
+      setValue('seniority_level', data.seniority_level)
+      setValue('linkedin_url', data.linkedin_url || '')
+      setValue('company_name', data.company_name)
+      setValue('company_website', data.company_website)
+      setValue('company_size', data.company_size)
+      setValue('industry', data.industry)
+      setValue('service_interest', data.service_interest)
+      setValue('pain_point', data.pain_point)
+      setValue('project_timeline', data.project_timeline)
+      setValue('budget_range', data.budget_range || undefined)
+      setValue('lead_source', data.lead_source)
     } else if (error) {
       console.error(error)
       router.push('/leads')
@@ -176,9 +197,12 @@ export default function EditLeadPage() {
 
             <div className="space-y-2">
               <Label htmlFor="seniority_level">Seniority Level *</Label>
-              <Select onValueChange={(value) => setValue('seniority_level', value as any)}>
+              <Select 
+                value={seniorityLevel} 
+                onValueChange={(value) => setValue('seniority_level', value as any)}
+              >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select seniority level" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="C-Level">C-Level</SelectItem>
@@ -223,9 +247,12 @@ export default function EditLeadPage() {
 
             <div className="space-y-2">
               <Label htmlFor="company_size">Company Size *</Label>
-              <Select onValueChange={(value) => setValue('company_size', value as any)}>
+              <Select 
+                value={companySize} 
+                onValueChange={(value) => setValue('company_size', value as any)}
+              >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select company size" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="1-10">1-10</SelectItem>
@@ -243,9 +270,12 @@ export default function EditLeadPage() {
 
             <div className="space-y-2">
               <Label htmlFor="industry">Industry *</Label>
-              <Select onValueChange={(value) => setValue('industry', value as any)}>
+              <Select 
+                value={industry} 
+                onValueChange={(value) => setValue('industry', value as any)}
+              >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select industry" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Financial Services">Financial Services</SelectItem>
@@ -308,9 +338,12 @@ export default function EditLeadPage() {
 
             <div className="space-y-2">
               <Label htmlFor="project_timeline">Project Timeline *</Label>
-              <Select onValueChange={(value) => setValue('project_timeline', value as any)}>
+              <Select 
+                value={projectTimeline} 
+                onValueChange={(value) => setValue('project_timeline', value as any)}
+              >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select timeline" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ASAP">ASAP</SelectItem>
@@ -327,9 +360,12 @@ export default function EditLeadPage() {
 
             <div className="space-y-2">
               <Label htmlFor="budget_range">Budget Range</Label>
-              <Select onValueChange={(value) => setValue('budget_range', value as any)}>
+              <Select 
+                value={budgetRange || ''} 
+                onValueChange={(value) => setValue('budget_range', value as any)}
+              >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select budget (optional)" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="<$10K">{'<'}$10K</SelectItem>
@@ -344,9 +380,12 @@ export default function EditLeadPage() {
 
             <div className="space-y-2">
               <Label htmlFor="lead_source">Lead Source *</Label>
-              <Select onValueChange={(value) => setValue('lead_source', value as any)}>
+              <Select 
+                value={leadSource} 
+                onValueChange={(value) => setValue('lead_source', value as any)}
+              >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select source" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="LinkedIn">LinkedIn</SelectItem>

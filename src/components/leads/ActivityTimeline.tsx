@@ -1,4 +1,4 @@
-// src/components/leads/ActivityTimeline.tsx
+// src/components/leads/ActivityTimeline.tsx - IMPROVED VERSION
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -43,15 +43,15 @@ const ACTIVITY_ICONS: Record<string, any> = {
 }
 
 const ACTIVITY_COLORS: Record<string, string> = {
-  status_changed: 'text-blue-500',
-  note_added: 'text-purple-500',
-  email_sent: 'text-green-500',
-  call_made: 'text-orange-500',
-  meeting_scheduled: 'text-indigo-500',
-  meeting_completed: 'text-green-600',
-  document_sent: 'text-pink-500',
-  follow_up_scheduled: 'text-yellow-500',
-  lead_updated: 'text-gray-500',
+  status_changed: 'text-blue-500 bg-blue-100 dark:bg-blue-900',
+  note_added: 'text-purple-500 bg-purple-100 dark:bg-purple-900',
+  email_sent: 'text-green-500 bg-green-100 dark:bg-green-900',
+  call_made: 'text-orange-500 bg-orange-100 dark:bg-orange-900',
+  meeting_scheduled: 'text-indigo-500 bg-indigo-100 dark:bg-indigo-900',
+  meeting_completed: 'text-green-600 bg-green-100 dark:bg-green-900',
+  document_sent: 'text-pink-500 bg-pink-100 dark:bg-pink-900',
+  follow_up_scheduled: 'text-yellow-500 bg-yellow-100 dark:bg-yellow-900',
+  lead_updated: 'text-gray-500 bg-gray-100 dark:bg-gray-800',
 }
 
 interface ActivityTimelineProps {
@@ -139,16 +139,25 @@ export default function ActivityTimeline({ leadId }: ActivityTimelineProps) {
     }
   }
 
-  const formatTimeAgo = (dateString: string) => {
+  const formatDateTime = (dateString: string) => {
     const date = new Date(dateString)
     const now = new Date()
     const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
 
+    // Show relative time for recent activities
     if (diffInSeconds < 60) return 'Just now'
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`
-    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`
-    return date.toLocaleDateString()
+    
+    // Show full date/time for older activities
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    })
   }
 
   return (
@@ -220,13 +229,13 @@ export default function ActivityTimeline({ leadId }: ActivityTimelineProps) {
           <div className="space-y-4">
             {activities.map((activity, index) => {
               const Icon = ACTIVITY_ICONS[activity.activity_type] || MessageSquare
-              const colorClass = ACTIVITY_COLORS[activity.activity_type] || 'text-gray-500'
+              const colorClass = ACTIVITY_COLORS[activity.activity_type] || 'text-gray-500 bg-gray-100 dark:bg-gray-800'
 
               return (
                 <div key={activity.id} className="flex gap-3">
                   {/* Timeline Line */}
                   <div className="flex flex-col items-center">
-                    <div className={`rounded-full p-2 ${colorClass} bg-gray-100 dark:bg-gray-800`}>
+                    <div className={`rounded-full p-2 ${colorClass}`}>
                       <Icon className="h-4 w-4" />
                     </div>
                     {index < activities.length - 1 && (
@@ -236,24 +245,30 @@ export default function ActivityTimeline({ leadId }: ActivityTimelineProps) {
 
                   {/* Activity Content */}
                   <div className="flex-1 pb-4">
-                    <div className="flex items-start justify-between">
-                      <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1">
                         <p className="text-sm font-medium">{activity.description}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {activity.user_name} • {formatTimeAgo(activity.created_at)}
-                        </p>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                          <span className="font-medium">{activity.user_name}</span>
+                          <span>•</span>
+                          <span>{formatDateTime(activity.created_at)}</span>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Metadata */}
+                    {/* Metadata - Show status changes */}
                     {activity.metadata && Object.keys(activity.metadata).length > 0 && (
                       <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-900 rounded text-xs">
                         {activity.activity_type === 'status_changed' && (
-                          <span>
-                            <span className="font-medium">{activity.metadata.old_status}</span>
-                            {' → '}
-                            <span className="font-medium">{activity.metadata.new_status}</span>
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-1 rounded bg-gray-200 dark:bg-gray-700 font-medium">
+                              {activity.metadata.old_status}
+                            </span>
+                            <span>→</span>
+                            <span className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-medium">
+                              {activity.metadata.new_status}
+                            </span>
+                          </div>
                         )}
                       </div>
                     )}

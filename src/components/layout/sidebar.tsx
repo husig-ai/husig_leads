@@ -1,8 +1,9 @@
+// src/components/layout/sidebar.tsx - UPDATED
 'use client'
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Home, Users, Plus, User, LogOut } from 'lucide-react'
+import { Home, Users, User, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -10,7 +11,6 @@ import { Button } from '@/components/ui/button'
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
   { name: 'Leads', href: '/leads', icon: Users },
-  { name: 'Add Lead', href: '/leads/new', icon: Plus },
   { name: 'Profile', href: '/profile', icon: User },
 ]
 
