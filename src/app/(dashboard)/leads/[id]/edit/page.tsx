@@ -1,4 +1,3 @@
-// src/app/(dashboard)/leads/[id]/edit/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
