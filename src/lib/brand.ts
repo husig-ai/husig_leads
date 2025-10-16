@@ -1,4 +1,3 @@
-// src/lib/brand.ts
 export const husigBrand = {
   colors: {
     primary: {
@@ -24,59 +23,10 @@ export const husigBrand = {
       700: '#4338ca',
       800: '#3730a3',
       900: '#312e81'
-    },
-    success: {
-      50: '#f0fdf4',
-      100: '#dcfce7',
-      500: '#22c55e',
-      600: '#16a34a',
-      700: '#15803d'
-    },
-    warning: {
-      50: '#fffbeb',
-      100: '#fef3c7',
-      500: '#f59e0b',
-      600: '#d97706'
-    },
-    error: {
-      50: '#fef2f2',
-      100: '#fee2e2',
-      500: '#ef4444',
-      600: '#dc2626'
-    },
-    gray: {
-      50: '#f9fafb',
-      100: '#f3f4f6',
-      200: '#e5e7eb',
-      300: '#d1d5db',
-      400: '#9ca3af',
-      500: '#6b7280',
-      600: '#4b5563',
-      700: '#374151',
-      800: '#1f2937',
-      900: '#111827'
     }
-  },
-  typography: {
-    fontFamily: '"Inter", system-ui, -apple-system, sans-serif',
-    heading: '"Inter", system-ui, -apple-system, sans-serif'
-  },
-  spacing: {
-    xs: '0.5rem',
-    sm: '1rem',
-    md: '1.5rem',
-    lg: '2rem',
-    xl: '3rem'
-  },
-  borderRadius: {
-    sm: '0.375rem',
-    md: '0.5rem',
-    lg: '0.75rem',
-    xl: '1rem'
   }
 };
 
-// Lead scoring color mapping
 export const getLeadScoreStyle = (score: number) => {
   if (score >= 80) return {
     bg: 'bg-red-100',

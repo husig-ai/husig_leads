@@ -48,23 +48,3 @@ export const HuSigLogo: React.FC<HuSigLogoProps> = ({
     </div>
   );
 };
-
-// Alternative logo component for when you have the actual logo file
-export const HuSigLogoImage: React.FC<HuSigLogoProps> = ({ 
-  size = 'default', 
-  className = '' 
-}) => {
-  const sizeClasses = {
-    small: 'h-8 w-auto',
-    default: 'h-10 w-auto',
-    large: 'h-12 w-auto'
-  };
-
-  return (
-    <img 
-      src="/images/husig-logo.png" // Replace with actual logo path
-      alt="HuSig"
-      className={`${sizeClasses[size]} ${className}`}
-    />
-  );
-};

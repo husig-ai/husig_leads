@@ -1,4 +1,4 @@
-// src/app/(dashboard)/leads/page.tsx
+// src/app/(dashboard)/leads/page.tsx - FIXED IMPORT CONFLICT
 'use client'
 
 import React, { useEffect, useState } from 'react'
@@ -13,13 +13,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { 
   Search, 
   Plus, 
-  Filter, 
   Download, 
   Mail, 
   Phone, 
-  Link, 
+  ExternalLink, // RENAMED FROM Link to avoid conflict
   Building2,
-  Calendar,
   MoreHorizontal,
   Edit,
   Trash2
@@ -31,9 +29,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { formatDateTime } from '@/lib/utils'
 import { Lead } from '@/types/database'
-import Link from 'next/link'
+import Link from 'next/link' // Next.js Link component
+import { toast } from '@/components/ui/use-toast'
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([])
@@ -64,6 +62,11 @@ export default function LeadsPage() {
       setLeads(data || [])
     } catch (error) {
       console.error('Error loading leads:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to load leads',
+        variant: 'destructive'
+      })
     } finally {
       setLoading(false)
     }
@@ -75,10 +78,10 @@ export default function LeadsPage() {
     // Search filter
     if (searchTerm) {
       filtered = filtered.filter(lead =>
-        lead.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.company_name.toLowerCase().includes(searchTerm.toLowerCase())
+        lead.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        lead.last_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        lead.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        lead.company_name?.toLowerCase().includes(searchTerm.toLowerCase())
       )
     }
 
@@ -115,8 +118,17 @@ export default function LeadsPage() {
       if (error) throw error
       
       setLeads(leads.filter(lead => lead.id !== leadId))
+      toast({
+        title: 'Success',
+        description: 'Lead deleted successfully',
+      })
     } catch (error) {
       console.error('Error deleting lead:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to delete lead',
+        variant: 'destructive'
+      })
     }
   }
 
@@ -143,6 +155,11 @@ export default function LeadsPage() {
     a.href = url
     a.download = `leads-export-${new Date().toISOString().split('T')[0]}.csv`
     a.click()
+    
+    toast({
+      title: 'Success',
+      description: 'Leads exported successfully',
+    })
   }
 
   if (loading) {
@@ -225,7 +242,7 @@ export default function LeadsPage() {
                   <SelectItem value="hot">Hot (80-100)</SelectItem>
                   <SelectItem value="warm">Warm (60-79)</SelectItem>
                   <SelectItem value="qualified">Qualified (40-59)</SelectItem>
-                  <SelectItem value="cold">Cold (<40)</SelectItem>
+                  <SelectItem value="cold">Cold ({`<`}40)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -314,7 +331,7 @@ export default function LeadsPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <Badge variant="outline" className="text-xs capitalize">
-                            {lead.lead_status.replace('_', ' ')}
+                            {lead.lead_status?.replace('_', ' ')}
                           </Badge>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -349,7 +366,7 @@ export default function LeadsPage() {
                                 size="sm"
                                 onClick={() => window.open(lead.linkedin_url, '_blank')}
                               >
-                                <Link className="w-4 h-4" />
+                                <ExternalLink className="w-4 h-4" />
                               </Button>
                             )}
                             
