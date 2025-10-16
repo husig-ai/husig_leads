@@ -1,11 +1,10 @@
-// src/app/(dashboard)/leads/page.tsx - FIXED IMPORT CONFLICT
 'use client'
 
 import React, { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { DashboardHeader } from '@/components/layout/DashboardHeader'
 import { LeadScoreBadge } from '@/components/leads/LeadScoreBadge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -15,12 +14,14 @@ import {
   Plus, 
   Download, 
   Mail, 
-  Phone, 
-  ExternalLink, // RENAMED FROM Link to avoid conflict
   Building2,
   MoreHorizontal,
   Edit,
-  Trash2
+  Trash2,
+  Eye,
+  Calendar,
+  DollarSign,
+  Loader2
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -30,7 +31,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Lead } from '@/types/database'
-import Link from 'next/link' // Next.js Link component
+import Link from 'next/link'
 import { toast } from '@/components/ui/use-toast'
 
 export default function LeadsPage() {
@@ -75,7 +76,6 @@ export default function LeadsPage() {
   const filterLeads = () => {
     let filtered = leads
 
-    // Search filter
     if (searchTerm) {
       filtered = filtered.filter(lead =>
         lead.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -85,12 +85,10 @@ export default function LeadsPage() {
       )
     }
 
-    // Status filter
     if (statusFilter !== 'all') {
       filtered = filtered.filter(lead => lead.lead_status === statusFilter)
     }
 
-    // Score filter
     if (scoreFilter !== 'all') {
       filtered = filtered.filter(lead => {
         if (scoreFilter === 'hot') return lead.lead_score >= 80
@@ -134,9 +132,7 @@ export default function LeadsPage() {
 
   const exportCSV = () => {
     const csvContent = [
-      // Headers
       ['Name', 'Email', 'Company', 'Score', 'Status', 'Timeline', 'Budget', 'Created'].join(','),
-      // Data
       ...filteredLeads.map(lead => [
         `"${lead.first_name} ${lead.last_name}"`,
         lead.email,
@@ -162,19 +158,33 @@ export default function LeadsPage() {
     })
   }
 
+  const getStatusBadgeClass = (status: string) => {
+    switch (status) {
+      case 'new': return 'status-new'
+      case 'contacted': return 'status-contacted'
+      case 'qualified': return 'status-qualified'
+      case 'converted': return 'status-converted'
+      case 'lost': return 'status-lost'
+      default: return 'bg-gray-500'
+    }
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-husig-dark">
         <DashboardHeader />
         <div className="flex items-center justify-center h-96">
-          <div className="text-lg text-gray-600">Loading leads...</div>
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-husig-purple-500 mx-auto mb-4" />
+            <div className="text-lg text-gray-300">Loading leads...</div>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-husig-dark">
       <DashboardHeader />
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -182,16 +192,18 @@ export default function LeadsPage() {
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Leads</h1>
-              <p className="text-gray-600 mt-1">Manage your lead pipeline and track opportunities</p>
+              <h1 className="text-4xl font-bold text-white mb-2">
+                <span className="text-husig-gradient">Leads</span>
+              </h1>
+              <p className="text-gray-400 text-lg">Manage your lead pipeline and track opportunities</p>
             </div>
             <div className="flex items-center space-x-3">
-              <Button variant="outline" onClick={exportCSV}>
+              <Button variant="outline" onClick={exportCSV} className="btn-husig-outline">
                 <Download className="w-4 h-4 mr-2" />
                 Export CSV
               </Button>
               <Link href="/leads/new">
-                <Button className="bg-blue-600 hover:bg-blue-700">
+                <Button className="btn-husig-primary">
                   <Plus className="w-4 h-4 mr-2" />
                   Add Lead
                 </Button>
@@ -201,15 +213,15 @@ export default function LeadsPage() {
         </div>
 
         {/* Filters */}
-        <Card className="border-0 shadow-sm mb-6">
+        <Card className="card-husig-glass border-gray-700/50 mb-6">
           <CardContent className="p-6">
             <div className="flex flex-col sm:flex-row gap-4">
               {/* Search */}
               <div className="flex-1 relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
                 <Input 
                   placeholder="Search leads by name, email, or company..." 
-                  className="pl-10"
+                  className="pl-10 husig-input"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -217,32 +229,33 @@ export default function LeadsPage() {
               
               {/* Status Filter */}
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-48">
+                <SelectTrigger className="w-48 husig-select">
                   <SelectValue placeholder="Filter by status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
                   <SelectItem value="new">New</SelectItem>
-                  <SelectItem value="qualifying">Qualifying</SelectItem>
+                  <SelectItem value="contacted">Contacted</SelectItem>
                   <SelectItem value="qualified">Qualified</SelectItem>
                   <SelectItem value="demo_scheduled">Demo Scheduled</SelectItem>
                   <SelectItem value="proposal_sent">Proposal Sent</SelectItem>
+                  <SelectItem value="negotiating">Negotiating</SelectItem>
                   <SelectItem value="converted">Converted</SelectItem>
                   <SelectItem value="lost">Lost</SelectItem>
                 </SelectContent>
               </Select>
-
+              
               {/* Score Filter */}
               <Select value={scoreFilter} onValueChange={setScoreFilter}>
-                <SelectTrigger className="w-48">
+                <SelectTrigger className="w-48 husig-select">
                   <SelectValue placeholder="Filter by score" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Scores</SelectItem>
-                  <SelectItem value="hot">Hot (80-100)</SelectItem>
-                  <SelectItem value="warm">Warm (60-79)</SelectItem>
-                  <SelectItem value="qualified">Qualified (40-59)</SelectItem>
-                  <SelectItem value="cold">Cold ({`<`}40)</SelectItem>
+                  <SelectItem value="hot">🔴 Hot (80-100)</SelectItem>
+                  <SelectItem value="warm">🟠 Warm (60-79)</SelectItem>
+                  <SelectItem value="qualified">🟡 Qualified (40-59)</SelectItem>
+                  <SelectItem value="cold">⚪ Cold (&lt;40)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -250,164 +263,145 @@ export default function LeadsPage() {
         </Card>
 
         {/* Results Summary */}
-        <div className="mb-4">
-          <p className="text-sm text-gray-600">
+        <div className="mb-6">
+          <p className="text-gray-400">
             Showing {filteredLeads.length} of {leads.length} leads
           </p>
         </div>
 
-        {/* Leads Table */}
-        <Card className="border-0 shadow-sm">
-          <CardContent className="p-0">
-            {filteredLeads.length === 0 ? (
-              <div className="text-center py-12">
-                <Building2 className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                <p className="text-gray-500 mb-4">
-                  {searchTerm || statusFilter !== 'all' || scoreFilter !== 'all' 
-                    ? 'No leads match your filters' 
-                    : 'No leads yet'
-                  }
-                </p>
+        {/* Leads Grid */}
+        {filteredLeads.length === 0 ? (
+          <Card className="card-husig-glass border-gray-700/50">
+            <CardContent className="p-12 text-center">
+              <Building2 className="w-16 h-16 text-gray-500 mx-auto mb-4" />
+              <h3 className="text-xl font-medium text-gray-300 mb-2">
+                {leads.length === 0 ? 'No leads yet' : 'No leads match your filters'}
+              </h3>
+              <p className="text-gray-500 mb-6">
+                {leads.length === 0 
+                  ? 'Get started by adding your first lead' 
+                  : 'Try adjusting your search or filter criteria'
+                }
+              </p>
+              {leads.length === 0 && (
                 <Link href="/leads/new">
-                  <Button className="bg-blue-600 hover:bg-blue-700">
+                  <Button className="btn-husig-primary">
                     <Plus className="w-4 h-4 mr-2" />
                     Add Your First Lead
                   </Button>
                 </Link>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Contact
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Company
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Score
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Timeline
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Created
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredLeads.map((lead) => (
-                      <tr key={lead.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                              <span className="text-sm font-medium text-blue-600">
-                                {lead.first_name?.[0]}{lead.last_name?.[0]}
-                              </span>
-                            </div>
-                            <div>
-                              <div className="font-medium text-gray-900">
-                                {lead.first_name} {lead.last_name}
-                              </div>
-                              <div className="text-sm text-gray-500">{lead.job_title}</div>
-                              <div className="text-sm text-gray-400">{lead.email}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{lead.company_name}</div>
-                          <div className="text-sm text-gray-500">{lead.industry}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <LeadScoreBadge score={lead.lead_score} />
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Badge variant="outline" className="text-xs capitalize">
-                            {lead.lead_status?.replace('_', ' ')}
-                          </Badge>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-500">{lead.project_timeline}</span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-500">
-                            {new Date(lead.created_at).toLocaleDateString()}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center space-x-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => window.open(`mailto:${lead.email}`)}
-                            >
-                              <Mail className="w-4 h-4" />
-                            </Button>
-                            {lead.phone && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => window.open(`tel:${lead.phone}`)}
-                              >
-                                <Phone className="w-4 h-4" />
-                              </Button>
-                            )}
-                            {lead.linkedin_url && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => window.open(lead.linkedin_url, '_blank')}
-                              >
-                                <ExternalLink className="w-4 h-4" />
-                              </Button>
-                            )}
-                            
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm">
-                                  <MoreHorizontal className="w-4 h-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem asChild>
-                                  <Link href={`/leads/${lead.id}`}>
-                                    View Details
-                                  </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
-                                  <Link href={`/leads/${lead.id}/edit`}>
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    Edit
-                                  </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem 
-                                  onClick={() => handleDelete(lead.id)}
-                                  className="text-red-600"
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            {filteredLeads.map((lead) => (
+              <Card 
+                key={lead.id} 
+                className="card-husig-glass border-gray-700/50 hover:border-husig-purple-500/50 transition-all duration-300 cursor-pointer group"
+              >
+                <CardContent className="p-6">
+                  {/* Header with Avatar and Actions */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-12 h-12 bg-husig-gradient rounded-full flex items-center justify-center">
+                        <span className="text-white font-medium">
+                          {lead.first_name[0]}{lead.last_name[0]}
+                        </span>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-white group-hover:text-husig-purple-300 transition-colors">
+                          {lead.first_name} {lead.last_name}
+                        </h3>
+                        <p className="text-sm text-gray-400">{lead.job_title}</p>
+                      </div>
+                    </div>
+                    
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-400 hover:text-white">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="bg-gray-800 border-gray-700">
+                        <Link href={`/leads/${lead.id}`}>
+                          <DropdownMenuItem className="text-gray-300 hover:text-white hover:bg-gray-700 cursor-pointer">
+                            <Eye className="mr-2 h-4 w-4" />
+                            View Details
+                          </DropdownMenuItem>
+                        </Link>
+                        <Link href={`/leads/${lead.id}/edit`}>
+                          <DropdownMenuItem className="text-gray-300 hover:text-white hover:bg-gray-700 cursor-pointer">
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit
+                          </DropdownMenuItem>
+                        </Link>
+                        <DropdownMenuSeparator className="bg-gray-700" />
+                        <DropdownMenuItem 
+                          onClick={() => handleDelete(lead.id)}
+                          className="text-red-400 hover:text-red-300 hover:bg-red-950/20 cursor-pointer"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
+                  {/* Company Info */}
+                  <div className="mb-4">
+                    <div className="flex items-center text-gray-300 mb-2">
+                      <Building2 className="w-4 h-4 mr-2 text-gray-500" />
+                      <span className="font-medium">{lead.company_name}</span>
+                    </div>
+                    <div className="flex items-center text-gray-400 text-sm">
+                      <Mail className="w-4 h-4 mr-2" />
+                      <span>{lead.email}</span>
+                    </div>
+                  </div>
+
+                  {/* Score and Status */}
+                  <div className="flex items-center justify-between mb-4">
+                    <LeadScoreBadge score={lead.lead_score} />
+                    <Badge className={`${getStatusBadgeClass(lead.lead_status)} border-0`}>
+                      {lead.lead_status.charAt(0).toUpperCase() + lead.lead_status.slice(1)}
+                    </Badge>
+                  </div>
+
+                  {/* Project Details */}
+                  <div className="space-y-2 mb-4">
+                    {lead.project_timeline && (
+                      <div className="flex items-center text-sm text-gray-400">
+                        <Calendar className="w-4 h-4 mr-2" />
+                        <span>Timeline: {lead.project_timeline}</span>
+                      </div>
+                    )}
+                    {lead.budget_range && (
+                      <div className="flex items-center text-sm text-gray-400">
+                        <DollarSign className="w-4 h-4 mr-2" />
+                        <span>Budget: {lead.budget_range}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action Button */}
+                  <Link href={`/leads/${lead.id}`} className="block">
+                    <Button className="w-full btn-husig-outline group-hover:btn-husig-primary transition-all duration-300">
+                      View Details
+                    </Button>
+                  </Link>
+
+                  {/* Footer */}
+                  <div className="mt-4 pt-4 border-t border-gray-700/50">
+                    <p className="text-xs text-gray-500">
+                      Created {new Date(lead.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

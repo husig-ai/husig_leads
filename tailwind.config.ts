@@ -1,6 +1,3 @@
-// tailwind.config.js
-const { fontFamily } = require("tailwindcss/defaultTheme")
-
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: ["class"],
@@ -20,38 +17,13 @@ module.exports = {
     },
     extend: {
       colors: {
-        // HuSig Brand Colors
-        'husig-blue': {
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          200: '#bae6fd',
-          300: '#7dd3fc',
-          400: '#38bdf8',
-          500: '#0ea5e9', // Primary brand blue
-          600: '#0284c7',
-          700: '#0369a1',
-          800: '#075985',
-          900: '#0c4a6e'
-        },
-        'husig-purple': {
-          50: '#f0f4ff',
-          100: '#e0e7ff',
-          200: '#c7d2fe',
-          300: '#a5b4fc',
-          400: '#818cf8',
-          500: '#6366f1', // Secondary purple
-          600: '#4f46e5',
-          700: '#4338ca',
-          800: '#3730a3',
-          900: '#312e81'
-        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         primary: {
-          DEFAULT: "#0ea5e9", // HuSig blue
+          DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
         },
         secondary: {
@@ -78,14 +50,36 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // HuSig Brand Colors
+        'husig-purple': {
+          50: 'hsl(245, 85%, 97%)',
+          100: 'hsl(244, 75%, 93%)',
+          200: 'hsl(244, 68%, 86%)',
+          300: 'hsl(244, 62%, 76%)',
+          400: 'hsl(244, 58%, 65%)',
+          500: 'hsl(263, 70%, 50%)', // Main purple
+          600: 'hsl(263, 70%, 45%)',
+          700: 'hsl(263, 70%, 40%)',
+          800: 'hsl(263, 70%, 35%)',
+          900: 'hsl(263, 70%, 30%)',
+        },
+        'husig-blue': {
+          50: 'hsl(198, 100%, 97%)',
+          100: 'hsl(198, 100%, 93%)',
+          200: 'hsl(198, 100%, 86%)',
+          300: 'hsl(198, 93%, 76%)',
+          400: 'hsl(198, 89%, 65%)',
+          500: 'hsl(198, 88%, 48%)', // Main blue
+          600: 'hsl(198, 88%, 43%)',
+          700: 'hsl(198, 88%, 38%)',
+          800: 'hsl(198, 88%, 33%)',
+          900: 'hsl(198, 88%, 28%)',
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
-      },
-      fontFamily: {
-        sans: ["Inter", ...fontFamily.sans],
       },
       keyframes: {
         "accordion-down": {
@@ -97,29 +91,40 @@ module.exports = {
           to: { height: 0 },
         },
         "fade-in": {
-          from: { opacity: 0, transform: "translateY(10px)" },
-          to: { opacity: 1, transform: "translateY(0)" },
+          "0%": { opacity: 0, transform: "translateY(10px)" },
+          "100%": { opacity: 1, transform: "translateY(0)" },
         },
-        "scale-in": {
-          from: { opacity: 0, transform: "scale(0.9)" },
-          to: { opacity: 1, transform: "scale(1)" },
+        "slide-in": {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(0)" },
+        },
+        "pulse-glow": {
+          "0%, 100%": { 
+            boxShadow: "0 0 20px rgba(139, 92, 246, 0.5)" 
+          },
+          "50%": { 
+            boxShadow: "0 0 30px rgba(139, 92, 246, 0.8)" 
+          },
         },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "fade-in": "fade-in 0.3s ease-out",
-        "scale-in": "scale-in 0.2s ease-out",
-      },
-      backgroundImage: {
-        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
-        'husig-gradient': 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)',
+        "fade-in": "fade-in 0.5s ease-out",
+        "slide-in": "slide-in 0.3s ease-out",
+        "pulse-glow": "pulse-glow 2s ease-in-out infinite",
       },
       boxShadow: {
-        'husig': '0 4px 20px -2px rgba(14, 165, 233, 0.1)',
-        'husig-lg': '0 10px 40px -4px rgba(14, 165, 233, 0.15)',
-      }
+        'husig': '0 10px 25px -3px rgba(139, 92, 246, 0.1), 0 4px 6px -2px rgba(139, 92, 246, 0.05)',
+        'husig-lg': '0 20px 40px -12px rgba(139, 92, 246, 0.25), 0 8px 16px -4px rgba(139, 92, 246, 0.1)',
+        'glow-purple': '0 0 20px rgba(139, 92, 246, 0.5)',
+        'glow-blue': '0 0 20px rgba(59, 130, 246, 0.5)',
+      },
+      backgroundImage: {
+        'husig-gradient': 'linear-gradient(135deg, hsl(198, 88%, 48%) 0%, hsl(263, 70%, 50%) 100%)',
+        'husig-gradient-subtle': 'linear-gradient(135deg, hsl(240, 10%, 8%) 0%, hsl(240, 10%, 12%) 100%)',
+        'husig-dark': 'linear-gradient(135deg, hsl(240, 10%, 3%) 0%, hsl(245, 15%, 8%) 100%)',
+      },
     },
   },
   plugins: [require("tailwindcss-animate")],

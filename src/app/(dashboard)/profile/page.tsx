@@ -13,7 +13,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { 
@@ -21,18 +20,10 @@ import {
   Mail, 
   Phone, 
   Building, 
-  Calendar,
-  Settings,
-  Bell,
-  Shield,
-  Download,
-  Upload,
   Save,
   Loader2,
-  Camera,
-  Check,
-  X,
-  AlertCircle
+  LogOut,
+  Calendar
 } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
 
@@ -44,12 +35,7 @@ const profileSchema = z.object({
   job_title: z.string().optional(),
   bio: z.string().max(500, 'Bio must be less than 500 characters').optional(),
   timezone: z.string().optional(),
-  date_format: z.string().optional(),
-  notifications_email: z.boolean(),
-  notifications_browser: z.boolean(),
-  notifications_lead_assigned: z.boolean(),
-  notifications_lead_updated: z.boolean(),
-  theme: z.enum(['light', 'dark', 'system']),
+  theme: z.enum(['light', 'dark', 'system']).optional(),
 })
 
 type ProfileFormData = z.infer<typeof profileSchema>
@@ -65,18 +51,9 @@ interface UserProfile {
   avatar_url?: string
   role: string
   created_at: string
-  last_sign_in_at?: string
-  preferences: {
-    timezone: string
-    date_format: string
-    notifications: {
-      email: boolean
-      browser: boolean
-      lead_assigned: boolean
-      lead_updated: boolean
-    }
-    theme: string
-  }
+  updated_at?: string
+  timezone?: string
+  theme?: string
 }
 
 export default function ProfilePage() {
@@ -84,7 +61,6 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [activeTab, setActiveTab] = useState('profile')
 
   const {
     register,
@@ -114,49 +90,54 @@ export default function ProfilePage() {
         return
       }
 
-      // Mock profile data - in real app, you'd fetch this from your database
-      const mockProfile: UserProfile = {
-        id: user.id,
-        email: user.email!,
-        full_name: user.user_metadata?.full_name || '',
-        phone: user.user_metadata?.phone || '',
-        company: 'HuSig Analytics',
-        job_title: 'Sales Manager',
-        bio: 'Passionate about data-driven sales and helping businesses grow through analytics.',
-        avatar_url: user.user_metadata?.avatar_url,
-        role: 'Manager',
-        created_at: user.created_at,
-        last_sign_in_at: user.last_sign_in_at,
-        preferences: {
+      // Try to get profile from profiles table
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+      let userProfile: UserProfile
+
+      if (profileError && profileError.code === 'PGRST116') {
+        // Profile doesn't exist, create one
+        const newProfile = {
+          id: user.id,
+          email: user.email!,
+          full_name: user.user_metadata?.full_name || '',
+          phone: user.user_metadata?.phone || '',
+          company: 'HuSig Analytics',
+          job_title: '',
+          bio: '',
+          role: 'intern',
           timezone: 'America/New_York',
-          date_format: 'MM/DD/YYYY',
-          notifications: {
-            email: true,
-            browser: true,
-            lead_assigned: true,
-            lead_updated: false
-          },
-          theme: 'system'
+          theme: 'dark'
         }
+
+        const { error: insertError } = await supabase
+          .from('profiles')
+          .insert([newProfile])
+
+        if (insertError) throw insertError
+        userProfile = { ...newProfile, created_at: new Date().toISOString() }
+      } else if (profileError) {
+        throw profileError
+      } else {
+        userProfile = profileData
       }
 
-      setProfile(mockProfile)
+      setProfile(userProfile)
 
       // Populate form
       const formData: ProfileFormData = {
-        full_name: mockProfile.full_name || '',
-        email: mockProfile.email,
-        phone: mockProfile.phone || '',
-        company: mockProfile.company || '',
-        job_title: mockProfile.job_title || '',
-        bio: mockProfile.bio || '',
-        timezone: mockProfile.preferences.timezone,
-        date_format: mockProfile.preferences.date_format,
-        notifications_email: mockProfile.preferences.notifications.email,
-        notifications_browser: mockProfile.preferences.notifications.browser,
-        notifications_lead_assigned: mockProfile.preferences.notifications.lead_assigned,
-        notifications_lead_updated: mockProfile.preferences.notifications.lead_updated,
-        theme: mockProfile.preferences.theme as 'light' | 'dark' | 'system',
+        full_name: userProfile.full_name || '',
+        email: userProfile.email,
+        phone: userProfile.phone || '',
+        company: userProfile.company || 'HuSig Analytics',
+        job_title: userProfile.job_title || '',
+        bio: userProfile.bio || '',
+        timezone: userProfile.timezone || 'America/New_York',
+        theme: (userProfile.theme as 'light' | 'dark' | 'system') || 'dark',
       }
 
       reset(formData)
@@ -178,18 +159,33 @@ export default function ProfilePage() {
     try {
       const supabase = createClient()
       
+      // Update profiles table
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          full_name: data.full_name,
+          phone: data.phone,
+          company: data.company,
+          job_title: data.job_title,
+          bio: data.bio,
+          timezone: data.timezone,
+          theme: data.theme,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', profile?.id)
+
+      if (updateError) throw updateError
+
       // Update auth user metadata
-      const { error: updateError } = await supabase.auth.updateUser({
+      const { error: authUpdateError } = await supabase.auth.updateUser({
         data: {
           full_name: data.full_name,
           phone: data.phone,
         }
       })
 
-      if (updateError) throw updateError
+      if (authUpdateError) throw authUpdateError
 
-      // In a real app, you'd also update your custom user profile table
-      
       toast({
         title: "Success!",
         description: "Profile updated successfully",
@@ -215,43 +211,15 @@ export default function ProfilePage() {
     router.push('/login')
   }
 
-  const handleChangePassword = () => {
-    toast({
-      title: "Feature Coming Soon",
-      description: "Password change functionality will be available soon.",
-    })
-  }
-
-  const handleChangeEmail = () => {
-    toast({
-      title: "Feature Coming Soon", 
-      description: "Email change functionality will be available soon.",
-    })
-  }
-
-  const handleDownloadData = () => {
-    toast({
-      title: "Feature Coming Soon",
-      description: "Data download functionality will be available soon.",
-    })
-  }
-
-  const handleDeleteAccount = () => {
-    if (confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
-      toast({
-        title: "Feature Coming Soon",
-        description: "Account deletion functionality will be available soon.",
-        variant: "destructive",
-      })
-    }
-  }
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-husig-dark">
         <DashboardHeader />
         <div className="flex items-center justify-center h-96">
-          <div className="text-lg text-gray-600">Loading profile...</div>
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-husig-purple-500 mx-auto mb-4" />
+            <div className="text-lg text-gray-300">Loading profile...</div>
+          </div>
         </div>
       </div>
     )
@@ -259,12 +227,12 @@ export default function ProfilePage() {
 
   if (!profile) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-husig-dark">
         <DashboardHeader />
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Profile Not Found</h1>
-            <p className="text-gray-600">Unable to load your profile data.</p>
+            <h1 className="text-2xl font-bold text-white mb-4">Profile Not Found</h1>
+            <p className="text-gray-400">Unable to load your profile data.</p>
           </div>
         </div>
       </div>
@@ -279,443 +247,221 @@ export default function ProfilePage() {
     })
   }
 
+  const getRoleBadgeClass = (role: string) => {
+    switch (role) {
+      case 'admin': return 'bg-red-500/20 text-red-400 border-red-500/30'
+      case 'manager': return 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+      case 'intern': return 'bg-green-500/20 text-green-400 border-green-500/30'
+      default: return 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-husig-dark">
       <DashboardHeader />
       
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Profile Settings</h1>
-          <p className="text-gray-600 mt-1">Manage your account settings and preferences</p>
+          <h1 className="text-4xl font-bold text-white mb-2">
+            <span className="text-husig-gradient">Profile</span>
+          </h1>
+          <p className="text-gray-400 text-lg">Manage your account information</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Sidebar Navigation */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Profile Summary Card */}
           <div className="lg:col-span-1">
-            <Card className="shadow-sm border-0 bg-white">
-              <CardContent className="p-0">
-                <nav className="space-y-1">
-                  {[
-                    { id: 'profile', label: 'Profile', icon: User },
-                    { id: 'account', label: 'Account', icon: Settings },
-                    { id: 'notifications', label: 'Notifications', icon: Bell },
-                    { id: 'security', label: 'Security', icon: Shield },
-                  ].map((item) => {
-                    const IconComponent = item.icon
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => setActiveTab(item.id)}
-                        className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-                          activeTab === item.id
-                            ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-600'
-                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                        }`}
-                      >
-                        <IconComponent className="w-5 h-5 mr-3" />
-                        {item.label}
-                      </button>
-                    )
-                  })}
-                </nav>
+            <Card className="card-husig-glass border-gray-700/50">
+              <CardContent className="p-6 text-center">
+                <div className="w-24 h-24 bg-husig-gradient rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-white text-2xl font-bold">
+                    {profile.full_name ? profile.full_name.split(' ').map(n => n[0]).join('') : 'U'}
+                  </span>
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-1">
+                  {profile.full_name || 'User'}
+                </h3>
+                <p className="text-gray-400 mb-3">{profile.job_title || 'Team Member'}</p>
+                <Badge className={`${getRoleBadgeClass(profile.role)} border`}>
+                  {profile.role.charAt(0).toUpperCase() + profile.role.slice(1)}
+                </Badge>
+                
+                <Separator className="my-6 bg-gray-700" />
+                
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center text-gray-400">
+                    <Mail className="w-4 h-4 mr-2" />
+                    <span className="truncate">{profile.email}</span>
+                  </div>
+                  <div className="flex items-center text-gray-400">
+                    <Building className="w-4 h-4 mr-2" />
+                    <span>{profile.company || 'HuSig Analytics'}</span>
+                  </div>
+                  <div className="flex items-center text-gray-400">
+                    <Calendar className="w-4 h-4 mr-2" />
+                    <span>Joined {formatDate(profile.created_at)}</span>
+                  </div>
+                </div>
+
+                <Separator className="my-6 bg-gray-700" />
+
+                <Button 
+                  variant="outline" 
+                  onClick={handleSignOut}
+                  className="w-full btn-husig-outline text-red-400 border-red-500/30 hover:bg-red-500/10"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sign Out
+                </Button>
               </CardContent>
             </Card>
           </div>
 
-          {/* Main Content */}
-          <div className="lg:col-span-3 space-y-6">
-            <form onSubmit={handleSubmit(onSubmit)}>
-              {/* Profile Tab */}
-              {activeTab === 'profile' && (
-                <Card className="shadow-sm border-0 bg-white">
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <User className="w-5 h-5 mr-2" />
-                      Profile Information
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    {/* Avatar Section */}
-                    <div className="flex items-center space-x-6">
-                      <div className="relative">
-                        <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center">
-                          {profile.avatar_url ? (
-                            <img 
-                              src={profile.avatar_url} 
-                              alt="Profile" 
-                              className="w-24 h-24 rounded-full object-cover"
-                            />
-                          ) : (
-                            <User className="w-12 h-12 text-blue-600" />
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          className="absolute bottom-0 right-0 p-1.5 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors"
-                        >
-                          <Camera className="w-4 h-4" />
-                        </button>
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-medium text-gray-900">{profile.full_name || 'User'}</h3>
-                        <p className="text-gray-600">{profile.email}</p>
-                        <Badge variant="outline" className="mt-1">
-                          {profile.role}
-                        </Badge>
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    {/* Basic Information */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <Label htmlFor="full_name">Full Name *</Label>
-                        <Input
-                          id="full_name"
-                          placeholder="Enter your full name"
-                          {...register('full_name')}
-                        />
-                        {errors.full_name && (
-                          <p className="text-sm text-red-500">{errors.full_name.message}</p>
-                        )}
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="email">Email Address *</Label>
-                        <Input
-                          id="email"
-                          type="email"
-                          disabled
-                          {...register('email')}
-                        />
-                        <p className="text-xs text-gray-500">Email cannot be changed here</p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="phone">Phone Number</Label>
-                        <Input
-                          id="phone"
-                          type="tel"
-                          placeholder="+1 (555) 123-4567"
-                          {...register('phone')}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="job_title">Job Title</Label>
-                        <Input
-                          id="job_title"
-                          placeholder="Your job title"
-                          {...register('job_title')}
-                        />
-                      </div>
-
-                      <div className="space-y-2 md:col-span-2">
-                        <Label htmlFor="company">Company</Label>
-                        <Input
-                          id="company"
-                          placeholder="Your company name"
-                          {...register('company')}
-                        />
-                      </div>
-
-                      <div className="space-y-2 md:col-span-2">
-                        <Label htmlFor="bio">Bio</Label>
-                        <Textarea
-                          id="bio"
-                          placeholder="Tell us about yourself..."
-                          rows={3}
-                          {...register('bio')}
-                        />
-                        <p className="text-xs text-gray-500">
-                          {watchedData.bio?.length || 0}/500 characters
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Account Tab */}
-              {activeTab === 'account' && (
-                <Card className="shadow-sm border-0 bg-white">
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <Settings className="w-5 h-5 mr-2" />
-                      Account Settings
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    {/* Account Info */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <Label className="text-sm font-medium text-gray-900">Account Created</Label>
-                        <p className="text-sm text-gray-600 mt-1">{formatDate(profile.created_at)}</p>
-                      </div>
-                      
-                      {profile.last_sign_in_at && (
-                        <div>
-                          <Label className="text-sm font-medium text-gray-900">Last Sign In</Label>
-                          <p className="text-sm text-gray-600 mt-1">{formatDate(profile.last_sign_in_at)}</p>
-                        </div>
+          {/* Profile Form */}
+          <div className="lg:col-span-2">
+            <Card className="card-husig-glass border-gray-700/50">
+              <CardHeader>
+                <CardTitle className="flex items-center text-white">
+                  <User className="w-5 h-5 mr-2 text-husig-purple-400" />
+                  Edit Profile
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+                  {/* Basic Info */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="full_name" className="text-gray-300">Full Name</Label>
+                      <Input
+                        id="full_name"
+                        {...register('full_name')}
+                        className="husig-input"
+                        placeholder="Enter your full name"
+                      />
+                      {errors.full_name && (
+                        <p className="text-red-400 text-sm mt-1">{errors.full_name.message}</p>
                       )}
                     </div>
 
-                    <Separator />
-
-                    {/* Preferences */}
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-medium text-gray-900">Preferences</h3>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <Label htmlFor="timezone">Timezone</Label>
-                          <Select 
-                            value={watchedData.timezone || ''}
-                            onValueChange={(value) => setValue('timezone', value, { shouldDirty: true })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select timezone" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="America/New_York">Eastern Time</SelectItem>
-                              <SelectItem value="America/Chicago">Central Time</SelectItem>
-                              <SelectItem value="America/Denver">Mountain Time</SelectItem>
-                              <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
-                              <SelectItem value="UTC">UTC</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="date_format">Date Format</Label>
-                          <Select 
-                            value={watchedData.date_format || ''}
-                            onValueChange={(value) => setValue('date_format', value, { shouldDirty: true })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select format" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
-                              <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
-                              <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="theme">Theme</Label>
-                          <Select 
-                            value={watchedData.theme || ''}
-                            onValueChange={(value) => setValue('theme', value as any, { shouldDirty: true })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select theme" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="light">Light</SelectItem>
-                              <SelectItem value="dark">Dark</SelectItem>
-                              <SelectItem value="system">System</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
+                    <div>
+                      <Label htmlFor="email" className="text-gray-300">Email Address</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        {...register('email')}
+                        className="husig-input"
+                        placeholder="Enter your email"
+                        disabled
+                      />
+                      <p className="text-gray-500 text-xs mt-1">Email cannot be changed here</p>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
+                  </div>
 
-              {/* Notifications Tab */}
-              {activeTab === 'notifications' && (
-                <Card className="shadow-sm border-0 bg-white">
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <Bell className="w-5 h-5 mr-2" />
-                      Notification Settings
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label className="text-sm font-medium text-gray-900">Email Notifications</Label>
-                          <p className="text-sm text-gray-600">Receive notifications via email</p>
-                        </div>
-                        <Switch 
-                          checked={watchedData.notifications_email || false}
-                          onCheckedChange={(checked) => setValue('notifications_email', checked, { shouldDirty: true })}
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label className="text-sm font-medium text-gray-900">Browser Notifications</Label>
-                          <p className="text-sm text-gray-600">Receive push notifications in your browser</p>
-                        </div>
-                        <Switch 
-                          checked={watchedData.notifications_browser || false}
-                          onCheckedChange={(checked) => setValue('notifications_browser', checked, { shouldDirty: true })}
-                        />
-                      </div>
-
-                      <Separator />
-
-                      <h4 className="text-sm font-medium text-gray-900">Lead Notifications</h4>
-                      
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label className="text-sm font-medium text-gray-900">New Lead Assigned</Label>
-                          <p className="text-sm text-gray-600">When a new lead is assigned to you</p>
-                        </div>
-                        <Switch 
-                          checked={watchedData.notifications_lead_assigned || false}
-                          onCheckedChange={(checked) => setValue('notifications_lead_assigned', checked, { shouldDirty: true })}
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label className="text-sm font-medium text-gray-900">Lead Updated</Label>
-                          <p className="text-sm text-gray-600">When a lead you're watching is updated</p>
-                        </div>
-                        <Switch 
-                          checked={watchedData.notifications_lead_updated || false}
-                          onCheckedChange={(checked) => setValue('notifications_lead_updated', checked, { shouldDirty: true })}
-                        />
-                      </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="phone" className="text-gray-300">Phone Number</Label>
+                      <Input
+                        id="phone"
+                        {...register('phone')}
+                        className="husig-input"
+                        placeholder="Enter your phone number"
+                      />
                     </div>
-                  </CardContent>
-                </Card>
-              )}
 
-              {/* Security Tab */}
-              {activeTab === 'security' && (
-                <Card className="shadow-sm border-0 bg-white">
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <Shield className="w-5 h-5 mr-2" />
-                      Security Settings
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="space-y-4">
-                      <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                        <div className="flex items-center">
-                          <Check className="w-5 h-5 text-blue-600 mr-2" />
-                          <span className="text-sm font-medium text-blue-900">Account Security</span>
-                        </div>
-                        <p className="text-sm text-blue-700 mt-1">
-                          Your account is protected with modern security practices.
-                        </p>
-                      </div>
-
-                      <div className="space-y-3">
-                        <Button 
-                          variant="outline" 
-                          className="w-full justify-start" 
-                          type="button"
-                          onClick={handleChangeEmail}
-                        >
-                          <Mail className="w-4 h-4 mr-2" />
-                          Change Email Address
-                        </Button>
-                        
-                        <Button 
-                          variant="outline" 
-                          className="w-full justify-start" 
-                          type="button"
-                          onClick={handleChangePassword}
-                        >
-                          <Shield className="w-4 h-4 mr-2" />
-                          Change Password
-                        </Button>
-                        
-                        <Button 
-                          variant="outline" 
-                          className="w-full justify-start" 
-                          type="button"
-                          onClick={handleDownloadData}
-                        >
-                          <Download className="w-4 h-4 mr-2" />
-                          Download My Data
-                        </Button>
-                      </div>
-
-                      <Separator />
-
-                      <div className="p-4 bg-red-50 rounded-lg border border-red-200">
-                        <h4 className="text-sm font-medium text-red-900 mb-2">Danger Zone</h4>
-                        <p className="text-sm text-red-700 mb-3">
-                          These actions are permanent and cannot be undone.
-                        </p>
-                        <Button 
-                          variant="destructive" 
-                          size="sm" 
-                          type="button"
-                          onClick={handleDeleteAccount}
-                        >
-                          Delete Account
-                        </Button>
-                      </div>
+                    <div>
+                      <Label htmlFor="job_title" className="text-gray-300">Job Title</Label>
+                      <Input
+                        id="job_title"
+                        {...register('job_title')}
+                        className="husig-input"
+                        placeholder="Enter your job title"
+                      />
                     </div>
-                  </CardContent>
-                </Card>
-              )}
+                  </div>
 
-              {/* Save Button */}
-              {activeTab !== 'security' && (
-                <Card className="shadow-sm border-0 bg-white">
-                  <CardContent className="pt-6">
-                    <div className="flex justify-between items-center">
-                      <div className="text-sm text-gray-600">
-                        {isDirty ? (
-                          <div className="flex items-center text-amber-600">
-                            <AlertCircle className="w-4 h-4 mr-2" />
-                            <span className="font-medium">You have unsaved changes</span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center text-green-600">
-                            <Check className="w-4 h-4 mr-2" />
-                            <span>All changes saved</span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div className="flex space-x-3">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={handleSignOut}
-                        >
-                          Sign Out
-                        </Button>
-                        
-                        <Button
-                          type="submit"
-                          disabled={saving || !isDirty}
-                          className="bg-blue-600 hover:bg-blue-700"
-                        >
-                          {saving ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              Saving...
-                            </>
-                          ) : (
-                            <>
-                              <Save className="w-4 h-4 mr-2" />
-                              Save Changes
-                            </>
-                          )}
-                        </Button>
-                      </div>
+                  <div>
+                    <Label htmlFor="company" className="text-gray-300">Company</Label>
+                    <Input
+                      id="company"
+                      {...register('company')}
+                      className="husig-input"
+                      placeholder="Enter your company"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="bio" className="text-gray-300">Bio</Label>
+                    <Textarea
+                      id="bio"
+                      {...register('bio')}
+                      className="husig-textarea"
+                      placeholder="Tell us about yourself..."
+                      rows={3}
+                    />
+                    <p className="text-gray-500 text-xs mt-1">
+                      {watchedData.bio?.length || 0}/500 characters
+                    </p>
+                  </div>
+
+                  {/* Preferences */}
+                  <Separator className="bg-gray-700" />
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="timezone" className="text-gray-300">Timezone</Label>
+                      <Select value={watchedData.timezone} onValueChange={(value) => setValue('timezone', value)}>
+                        <SelectTrigger className="husig-select">
+                          <SelectValue placeholder="Select timezone" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="America/New_York">Eastern Time</SelectItem>
+                          <SelectItem value="America/Chicago">Central Time</SelectItem>
+                          <SelectItem value="America/Denver">Mountain Time</SelectItem>
+                          <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
+                          <SelectItem value="UTC">UTC</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
-            </form>
+
+                    <div>
+                      <Label htmlFor="theme" className="text-gray-300">Theme Preference</Label>
+                      <Select value={watchedData.theme} onValueChange={(value) => setValue('theme', value as any)}>
+                        <SelectTrigger className="husig-select">
+                          <SelectValue placeholder="Select theme" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="light">Light</SelectItem>
+                          <SelectItem value="dark">Dark</SelectItem>
+                          <SelectItem value="system">System</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* Submit Button */}
+                  <div className="flex justify-end pt-4">
+                    <Button
+                      type="submit"
+                      disabled={!isDirty || saving}
+                      className="btn-husig-primary"
+                    >
+                      {saving ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4 mr-2" />
+                          Save Changes
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
