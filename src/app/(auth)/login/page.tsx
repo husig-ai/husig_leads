@@ -109,37 +109,6 @@ export default function LoginPage() {
                 disabled={loading}
               >
                 {loading ? (
-                  'Creating account...'
-                ) : (
-                  <>
-                    Create Account
-                    <ArrowRight className="w-4 h-4 ml-2" />
-                  </>
-                )}
-              </Button>
-              
-              <p className="text-sm text-center text-gray-600">
-                Already have an account?{' '}
-                <Link href="/login" className="text-blue-600 hover:text-blue-700 font-medium">
-                  Sign in
-                </Link>
-              </p>
-            </CardFooter>
-          </form>
-        </Card>
-
-        {/* Footer */}
-        <div className="text-center mt-8 text-sm text-gray-500">
-          <p>&copy; 2024 HuSig.ai. All rights reserved.</p>
-          <p className="mt-1">Data, LLM & AI Solutions at Scale</p>
-        </div>
-      </div>
-    </div>
-  )
-}"
-                disabled={loading}
-              >
-                {loading ? (
                   'Signing in...'
                 ) : (
                   <>
