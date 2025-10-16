@@ -1,3 +1,5 @@
+import { ReactNode } from "react"
+
 // src/types/database.ts
 export interface Database {
   public: {
@@ -98,6 +100,11 @@ export interface Company {
 }
 
 export interface Lead {
+  company_website: any
+  company_size: any
+  lead_source: any
+  company_name: ReactNode
+  industry: ReactNode
   id: string
   company_id: string  // Foreign key to companies
   
