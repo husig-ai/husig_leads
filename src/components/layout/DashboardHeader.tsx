@@ -1,9 +1,11 @@
+// src/components/layout/DashboardHeader.tsx - Updated with HuSig Logo
 'use client'
 
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { HuSigLogo } from '@/components/brand/HusigLogo'
 import { Button } from '@/components/ui/button'
 import { 
   LayoutDashboard, 
@@ -112,13 +114,7 @@ export function DashboardHeader() {
           {/* Logo */}
           <div className="flex items-center">
             <Link href="/dashboard" className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-husig-gradient rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">H</span>
-              </div>
-              <div>
-                <span className="text-xl font-bold text-white">HuSig</span>
-                <span className="text-sm text-gray-400 ml-2">Leads</span>
-              </div>
+              <HuSigLogo size="small" showText={false} />
             </Link>
           </div>
 
@@ -166,39 +162,29 @@ export function DashboardHeader() {
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-64 bg-gray-800 border-gray-700" align="end">
-                <div className="px-4 py-3">
-                  <div className="flex items-center space-x-3">
-                    <Avatar className="h-10 w-10">
-                      <AvatarFallback className="bg-husig-gradient text-white font-medium">
-                        {getUserInitials()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white truncate">
-                        {user?.full_name || 'User'}
-                      </p>
-                      <p className="text-xs text-gray-400 truncate">{user?.email}</p>
-                      <p className={`text-xs ${getRoleBadgeColor(user?.role || '')} capitalize`}>
-                        {user?.role}
-                      </p>
-                    </div>
-                  </div>
+              <DropdownMenuContent className="w-56" align="end" forceMount>
+                <div className="flex flex-col space-y-1 p-2">
+                  <p className="text-sm font-medium leading-none text-white">
+                    {user?.full_name || 'User'}
+                  </p>
+                  <p className="text-xs leading-none text-gray-400">
+                    {user?.email}
+                  </p>
+                  <span className={`text-xs font-medium ${getRoleBadgeColor(user?.role || 'intern')}`}>
+                    {user?.role?.charAt(0).toUpperCase() + user?.role?.slice(1) || 'Intern'}
+                  </span>
                 </div>
-                <DropdownMenuSeparator className="bg-gray-700" />
-                <Link href="/profile">
-                  <DropdownMenuItem className="text-gray-300 hover:text-white hover:bg-gray-700 cursor-pointer">
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/profile" className="cursor-pointer">
                     <User className="mr-2 h-4 w-4" />
-                    Profile Settings
-                  </DropdownMenuItem>
-                </Link>
-                <DropdownMenuSeparator className="bg-gray-700" />
-                <DropdownMenuItem 
-                  onClick={handleSignOut}
-                  className="text-red-400 hover:text-red-300 hover:bg-red-950/20 cursor-pointer"
-                >
+                    <span>Profile</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-red-400">
                   <LogOut className="mr-2 h-4 w-4" />
-                  Sign Out
+                  <span>Sign out</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

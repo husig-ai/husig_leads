@@ -50,9 +50,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md relative z-10">
         {/* Logo Header */}
         <div className="text-center mb-8">
-          <HuSigLogo size="large" className="mx-auto mb-6" />
-          <h2 className="text-3xl font-bold text-white mb-2">Welcome Back</h2>
-          <p className="text-gray-400 text-lg">Sign in to your HuSig account</p>
+          <HuSigLogo className="mx-auto mb-6" />
         </div>
 
         <Card className="card-husig-glass border-gray-700/50 shadow-husig-lg">
