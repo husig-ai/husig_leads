@@ -9,6 +9,7 @@ import { DashboardHeader } from '@/components/layout/DashboardHeader'
 import { LeadScoreBadge } from '@/components/leads/LeadScoreBadge'
 import NotesSystem from '@/components/leads/NotesSystem'
 import ActivityTimeline from '@/components/leads/ActivityTimeline'
+import StatusSelector from '@/components/leads/StatusSelector'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -30,7 +31,6 @@ import {
   Copy,
   Check,
   Loader2,
-  Calendar,
   AlertCircle
 } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
@@ -118,6 +118,12 @@ export default function LeadDetailPage() {
         description: "Failed to copy to clipboard",
         variant: "destructive",
       })
+    }
+  }
+
+  const handleStatusChange = (newStatus: string) => {
+    if (lead) {
+      setLead({ ...lead, lead_status: newStatus })
     }
   }
 
@@ -442,8 +448,24 @@ export default function LeadDetailPage() {
             
           </div>
 
+
           {/* Sidebar */}
           <div className="lg:col-span-1 space-y-6">
+            
+            {/* 🟣 New Lead Status Card */}
+            <Card className="card-husig-glass border-gray-700/50">
+              <CardHeader>
+                <CardTitle className="text-white">Lead Status</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <StatusSelector 
+                  leadId={lead.id} 
+                  currentStatus={lead.lead_status.charAt(0).toUpperCase() + lead.lead_status.slice(1).replace('_', ' ')} 
+                  onStatusChange={handleStatusChange}
+                />
+              </CardContent>
+            </Card>
+
             {/* Quick Actions */}
             <Card className="card-husig-glass border-gray-700/50">
               <CardHeader>

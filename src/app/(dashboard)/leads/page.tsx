@@ -80,8 +80,7 @@ export default function LeadsPage() {
       filtered = filtered.filter(lead =>
         lead.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         lead.last_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.company_name?.toLowerCase().includes(searchTerm.toLowerCase())
+        lead.email?.toLowerCase().includes(searchTerm.toLowerCase())
       )
     }
 
