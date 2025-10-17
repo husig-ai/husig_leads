@@ -448,7 +448,6 @@ export default function LeadDetailPage() {
             
           </div>
 
-
           {/* Sidebar */}
           <div className="lg:col-span-1 space-y-6">
             

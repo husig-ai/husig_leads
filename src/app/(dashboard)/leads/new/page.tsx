@@ -96,53 +96,79 @@ export default function NewLeadPage() {
     }
   }
 
-  const onSubmit = async (data: LeadFormData) => {
-    setLoading(true)
+const onSubmit = async (data: LeadFormData) => {
+  setLoading(true)
+  console.log('Form submitted with data:', data) // Debug
+  
+  try {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
     
-    try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (!user) {
-        throw new Error('User not authenticated')
-      }
-
-      // Calculate lead score
-      const leadScore = calculateLeadScore(data)
-      
-      const leadData = {
-        ...data,
-        lead_score: leadScore,
-        lead_status: 'new' as const,
-        created_by: user.id,
-        sourced_by: user.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
-
-      const { error } = await supabase
-        .from('leads')
-        .insert([leadData])
-
-      if (error) throw error
-
-      toast({
-        title: 'Success!',
-        description: `Lead created successfully with score ${leadScore}/100`,
-      })
-
-      router.push('/leads')
-    } catch (error) {
-      console.error('Error creating lead:', error)
-      toast({
-        title: 'Error',
-        description: 'Failed to create lead. Please try again.',
-        variant: 'destructive'
-      })
-    } finally {
-      setLoading(false)
+    if (!user) {
+      throw new Error('User not authenticated')
     }
+
+    const leadScore = calculateLeadScore(data)
+    
+    // Clean data to match database schema
+    const leadData = {
+      first_name: data.first_name,
+      last_name: data.last_name,
+      email: data.email,
+      phone: data.phone || null,
+      job_title: data.job_title,
+      seniority_level: data.seniority_level,
+      linkedin_url: data.linkedin_url || null,
+      company_name: data.company_name,
+      company_website: data.company_website || null,
+      company_size: data.company_size || null,
+      industry: data.industry || null,
+      service_interest: data.service_interest,
+      pain_point: data.pain_point,
+      project_timeline: data.project_timeline,
+      budget_range: data.budget_range || null,
+      lead_source: data.lead_source || 'other',
+      lead_status: 'new',
+      lead_score: leadScore,
+      created_by: user.id,
+      notes: data.notes || null
+    }
+
+    console.log('Inserting data:', leadData) // Debug
+
+    const { data: result, error } = await supabase
+      .from('leads')
+      .insert(leadData)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Database error:', error) // Debug
+      throw error
+    }
+
+    toast({
+      title: 'Success!',
+      description: `Lead created successfully with score ${leadScore}/100`,
+    })
+
+    router.push('/leads')
+  } catch (error) {
+    console.error('Full error:', error)
+    
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Unknown error occurred'
+    
+    toast({
+      title: 'Error',
+      description: `Failed to create lead: ${errorMessage}`,
+      variant: 'destructive'
+    })
+  } finally {
+    setLoading(false)
   }
+}
 
   const handleServiceToggle = (service: string) => {
     const current = serviceInterest || []

@@ -80,14 +80,14 @@ export const HuSigLogo: React.FC<HuSigLogoProps> = ({
     </g>
     <defs>
     <linearGradient id="paint0_linear_499_3204" x1="141.605" y1="3.70058" x2="150.335" y2="3.70058" gradientUnits="userSpaceOnUse">
-    <stop stop-color="#E266FF"/>
-    <stop offset="0.483221" stop-color="#985EE3"/>
-    <stop offset="1" stop-color="#7B4ABC"/>
+    <stop stopColor="#E266FF"/>
+    <stop offset="0.483221" stopColor="#985EE3"/>
+    <stop offset="1" stopColor="#7B4ABC"/>
     </linearGradient>
     <linearGradient id="paint1_linear_499_3204" x1="9.9859" y1="25.6167" x2="41.4606" y2="-0.406562" gradientUnits="userSpaceOnUse">
-    <stop stop-color="#E266FF"/>
-    <stop offset="0.483221" stop-color="#985EE3"/>
-    <stop offset="1" stop-color="#7B4ABC"/>
+    <stop stopColor="#E266FF"/>
+    <stop offset="0.483221" stopColor="#985EE3"/>
+    <stop offset="1" stopColor="#7B4ABC"/>
     </linearGradient>
     <clipPath id="clip0_499_3204">
     <rect width="185" height="49.8633" fill="white" transform="translate(0 0.0683594)"/>
