@@ -338,12 +338,12 @@ export default function LeadDetailPage() {
 
                     <div>
                       <p className="text-sm text-gray-500">Website</p>
-                      <a 
-                        ref={lead.company_website} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-husig-blue-400 hover:text-husig-blue-300 flex items-center"
-                      >
+                        <a 
+                          href={lead.company_website || '#'} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-husig-blue-400 hover:text-husig-blue-300 flex items-center"
+                        >
                         <Globe className="w-4 h-4 mr-2" />
                         {lead.company_website}
                         <ExternalLink className="w-3 h-3 ml-1" />
