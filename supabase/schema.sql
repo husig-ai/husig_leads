@@ -1,20 +1,19 @@
 -- ============================================================================
 -- HUSIG LEAD MANAGEMENT PLATFORM - COMPLETE DATABASE SCHEMA
--- Final Version with All Activity Logging
+-- Clean Version with Fixed Constraints
 -- ============================================================================
 
--- Drop existing tables (only if starting fresh)
--- Uncomment these lines if you want to completely reset the database
--- DROP TABLE IF EXISTS notes CASCADE;
--- DROP TABLE IF EXISTS activities CASCADE;
--- DROP TABLE IF EXISTS leads CASCADE;
--- DROP TABLE IF EXISTS profiles CASCADE;
+-- Drop existing tables (for clean reset)
+DROP TABLE IF EXISTS notes CASCADE;
+DROP TABLE IF EXISTS activities CASCADE;
+DROP TABLE IF EXISTS leads CASCADE;
+DROP TABLE IF EXISTS profiles CASCADE;
 
 -- ============================================================================
 -- PROFILES TABLE
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS profiles (
+CREATE TABLE profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   full_name TEXT,
   email TEXT,
@@ -27,7 +26,7 @@ CREATE TABLE IF NOT EXISTS profiles (
 -- LEADS TABLE
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS leads (
+CREATE TABLE leads (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   
   -- Contact Information
@@ -50,10 +49,22 @@ CREATE TABLE IF NOT EXISTS leads (
   pain_point TEXT NOT NULL,
   project_timeline TEXT CHECK (project_timeline IN ('ASAP', '1-3 months', '3-6 months', '6-12 months', 'Flexible')),
   budget_range TEXT CHECK (budget_range IN ('<$10K', '$10K-$50K', '$50K-$100K', '$100K-$250K', '$250K+', 'Not Sure')),
-  lead_source TEXT CHECK (lead_source IN ('LinkedIn', 'Google Search', 'Referral', 'Cold Outreach', 'Other')),
+  lead_source TEXT CHECK (lead_source IN ('LinkedIn', 'Google Search', 'Website', 'Referral', 'Conference', 'Cold Outreach', 'Other')),
   
-  -- Lead Management
-  lead_status TEXT CHECK (lead_status IN ('New', 'Contacted', 'Qualified', 'Demo Scheduled', 'Proposal Sent', 'Won', 'Lost')) DEFAULT 'New',
+  -- Lead Management (Updated to lowercase status values)
+  lead_status TEXT CHECK (lead_status IN (
+    'new', 
+    'qualifying', 
+    'qualified', 
+    'nurturing', 
+    'demo_scheduled', 
+    'demo_completed', 
+    'proposal_sent', 
+    'negotiating', 
+    'converted', 
+    'lost', 
+    'disqualified'
+  )) DEFAULT 'new',
   lead_score INTEGER DEFAULT 0 CHECK (lead_score >= 0 AND lead_score <= 100),
   notes TEXT,
   
@@ -70,7 +81,7 @@ CREATE TABLE IF NOT EXISTS leads (
 -- ACTIVITIES TABLE
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS activities (
+CREATE TABLE activities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   lead_id UUID REFERENCES leads(id) ON DELETE CASCADE NOT NULL,
   activity_type TEXT CHECK (activity_type IN (
@@ -95,7 +106,7 @@ CREATE TABLE IF NOT EXISTS activities (
 -- NOTES TABLE
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS notes (
+CREATE TABLE notes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   lead_id UUID REFERENCES leads(id) ON DELETE CASCADE NOT NULL,
   content TEXT NOT NULL,
@@ -109,21 +120,21 @@ CREATE TABLE IF NOT EXISTS notes (
 -- ============================================================================
 
 -- Leads indexes
-CREATE INDEX IF NOT EXISTS idx_leads_email ON leads(email);
-CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(lead_status);
-CREATE INDEX IF NOT EXISTS idx_leads_score ON leads(lead_score);
-CREATE INDEX IF NOT EXISTS idx_leads_created_by ON leads(created_by);
-CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_leads_company_name ON leads(company_name);
+CREATE INDEX idx_leads_email ON leads(email);
+CREATE INDEX idx_leads_status ON leads(lead_status);
+CREATE INDEX idx_leads_score ON leads(lead_score);
+CREATE INDEX idx_leads_created_by ON leads(created_by);
+CREATE INDEX idx_leads_created_at ON leads(created_at DESC);
+CREATE INDEX idx_leads_company_name ON leads(company_name);
 
 -- Activities indexes
-CREATE INDEX IF NOT EXISTS idx_activities_lead_id ON activities(lead_id);
-CREATE INDEX IF NOT EXISTS idx_activities_created_at ON activities(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_activities_type ON activities(activity_type);
+CREATE INDEX idx_activities_lead_id ON activities(lead_id);
+CREATE INDEX idx_activities_created_at ON activities(created_at DESC);
+CREATE INDEX idx_activities_type ON activities(activity_type);
 
 -- Notes indexes
-CREATE INDEX IF NOT EXISTS idx_notes_lead_id ON notes(lead_id);
-CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at DESC);
+CREATE INDEX idx_notes_lead_id ON notes(lead_id);
+CREATE INDEX idx_notes_created_at ON notes(created_at DESC);
 
 -- ============================================================================
 -- FUNCTIONS
@@ -264,49 +275,42 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- ============================================================================
 
 -- Trigger: Create profile on user signup
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_new_user();
 
 -- Trigger: Update updated_at on leads
-DROP TRIGGER IF EXISTS update_leads_updated_at ON leads;
 CREATE TRIGGER update_leads_updated_at
   BEFORE UPDATE ON leads
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
 -- Trigger: Update updated_at on notes
-DROP TRIGGER IF EXISTS update_notes_updated_at ON notes;
 CREATE TRIGGER update_notes_updated_at
   BEFORE UPDATE ON notes
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
 -- Trigger: Log lead status changes
-DROP TRIGGER IF EXISTS lead_status_change_trigger ON leads;
 CREATE TRIGGER lead_status_change_trigger
   AFTER UPDATE ON leads
   FOR EACH ROW
   EXECUTE FUNCTION log_lead_status_change();
 
 -- Trigger: Log lead creation
-DROP TRIGGER IF EXISTS lead_creation_trigger ON leads;
 CREATE TRIGGER lead_creation_trigger
   AFTER INSERT ON leads
   FOR EACH ROW
   EXECUTE FUNCTION log_lead_creation();
 
 -- Trigger: Log when notes are added
-DROP TRIGGER IF EXISTS note_added_trigger ON notes;
 CREATE TRIGGER note_added_trigger
   AFTER INSERT ON notes
   FOR EACH ROW
   EXECUTE FUNCTION log_note_added();
 
 -- Trigger: Log lead updates
-DROP TRIGGER IF EXISTS lead_update_trigger ON leads;
 CREATE TRIGGER lead_update_trigger
   AFTER UPDATE ON leads
   FOR EACH ROW
@@ -326,30 +330,32 @@ ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
 -- RLS POLICIES: PROFILES
 -- ============================================================================
 
-DROP POLICY IF EXISTS "Users can view their own profile" ON profiles;
 CREATE POLICY "Users can view their own profile"
   ON profiles FOR SELECT
   USING (auth.uid() = id);
 
-DROP POLICY IF EXISTS "Users can update their own profile" ON profiles;
 CREATE POLICY "Users can update their own profile"
   ON profiles FOR UPDATE
   USING (auth.uid() = id);
 
-DROP POLICY IF EXISTS "Users can insert their own profile" ON profiles;
-CREATE POLICY "Users can insert their own profile"
-  ON profiles FOR INSERT
-  WITH CHECK (auth.uid() = id);
+CREATE POLICY "Admins and managers can view all profiles"
+  ON profiles FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE profiles.id = auth.uid() 
+      AND profiles.role IN ('admin', 'manager')
+    )
+  );
 
 -- ============================================================================
 -- RLS POLICIES: LEADS
 -- ============================================================================
 
-DROP POLICY IF EXISTS "Users can view their own leads or all if admin/manager" ON leads;
 CREATE POLICY "Users can view their own leads or all if admin/manager"
   ON leads FOR SELECT
   USING (
-    auth.uid() = created_by 
+    created_by = auth.uid() 
     OR 
     EXISTS (
       SELECT 1 FROM profiles 
@@ -358,16 +364,14 @@ CREATE POLICY "Users can view their own leads or all if admin/manager"
     )
   );
 
-DROP POLICY IF EXISTS "Users can insert leads" ON leads;
 CREATE POLICY "Users can insert leads"
   ON leads FOR INSERT
   WITH CHECK (auth.uid() = created_by);
 
-DROP POLICY IF EXISTS "Users can update their own leads or all if admin/manager" ON leads;
 CREATE POLICY "Users can update their own leads or all if admin/manager"
   ON leads FOR UPDATE
   USING (
-    auth.uid() = created_by 
+    created_by = auth.uid() 
     OR 
     EXISTS (
       SELECT 1 FROM profiles 
@@ -376,14 +380,15 @@ CREATE POLICY "Users can update their own leads or all if admin/manager"
     )
   );
 
-DROP POLICY IF EXISTS "Only admins can delete leads" ON leads;
-CREATE POLICY "Only admins can delete leads"
+CREATE POLICY "Users can delete their own leads or all if admin/manager"
   ON leads FOR DELETE
   USING (
+    created_by = auth.uid() 
+    OR 
     EXISTS (
       SELECT 1 FROM profiles 
       WHERE profiles.id = auth.uid() 
-      AND profiles.role = 'admin'
+      AND profiles.role IN ('admin', 'manager')
     )
   );
 
@@ -391,7 +396,6 @@ CREATE POLICY "Only admins can delete leads"
 -- RLS POLICIES: ACTIVITIES
 -- ============================================================================
 
-DROP POLICY IF EXISTS "Users can view activities for their leads or all if admin/manager" ON activities;
 CREATE POLICY "Users can view activities for their leads or all if admin/manager"
   ON activities FOR SELECT
   USING (
@@ -410,7 +414,6 @@ CREATE POLICY "Users can view activities for their leads or all if admin/manager
     )
   );
 
-DROP POLICY IF EXISTS "Users can insert activities" ON activities;
 CREATE POLICY "Users can insert activities"
   ON activities FOR INSERT
   WITH CHECK (auth.uid() = created_by);
@@ -419,7 +422,6 @@ CREATE POLICY "Users can insert activities"
 -- RLS POLICIES: NOTES
 -- ============================================================================
 
-DROP POLICY IF EXISTS "Users can view notes for their leads or all if admin/manager" ON notes;
 CREATE POLICY "Users can view notes for their leads or all if admin/manager"
   ON notes FOR SELECT
   USING (
@@ -438,31 +440,25 @@ CREATE POLICY "Users can view notes for their leads or all if admin/manager"
     )
   );
 
-DROP POLICY IF EXISTS "Users can insert notes" ON notes;
 CREATE POLICY "Users can insert notes"
   ON notes FOR INSERT
   WITH CHECK (auth.uid() = created_by);
 
-DROP POLICY IF EXISTS "Users can update their own notes" ON notes;
 CREATE POLICY "Users can update their own notes"
   ON notes FOR UPDATE
   USING (auth.uid() = created_by);
 
-DROP POLICY IF EXISTS "Users can delete their own notes" ON notes;
 CREATE POLICY "Users can delete their own notes"
   ON notes FOR DELETE
   USING (auth.uid() = created_by);
 
 -- ============================================================================
--- VERIFICATION QUERIES (Optional - comment out after running)
+-- VERIFICATION QUERIES (Optional - remove comments to run after setup)
 -- ============================================================================
-
--- Uncomment these to verify everything was created successfully
 
 -- SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;
 -- SELECT indexname FROM pg_indexes WHERE schemaname = 'public' ORDER BY indexname;
--- SELECT proname FROM pg_proc WHERE proname LIKE '%lead%' OR proname LIKE '%profile%' OR proname LIKE '%note%';
--- SELECT tgname FROM pg_trigger WHERE tgname LIKE '%lead%' OR tgname LIKE '%profile%' OR tgname LIKE '%note%';
+-- SELECT conname, contype FROM pg_constraint WHERE connamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public');
 
 -- ============================================================================
 -- END OF SCHEMA
