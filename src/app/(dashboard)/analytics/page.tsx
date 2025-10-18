@@ -99,11 +99,11 @@ export default function AnalyticsPage() {
 
       const leadsByStatus = Object.entries(statusCounts).map(([status, count]) => ({
         name: status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' '),
-        value: count,
+        value: count as number, // Explicit type assertion
         color: STATUS_COLORS[status as keyof typeof STATUS_COLORS] || '#6B7280'
       }))
 
-      // Leads by source
+
       const sourceCounts = allLeads.reduce((acc, lead) => {
         const source = lead.lead_source || 'Unknown'
         acc[source] = (acc[source] || 0) + 1
@@ -112,7 +112,7 @@ export default function AnalyticsPage() {
 
       const leadsBySource = Object.entries(sourceCounts).map(([source, count]) => ({
         name: source,
-        value: count
+        value: count as number // Explicit type assertion
       }))
 
       // Leads by industry
@@ -124,8 +124,9 @@ export default function AnalyticsPage() {
 
       const leadsByIndustry = Object.entries(industryCounts).map(([industry, count]) => ({
         name: industry,
-        value: count
+        value: count as number // Explicit type assertion
       }))
+
 
       // Score distribution
       const scoreRanges = [

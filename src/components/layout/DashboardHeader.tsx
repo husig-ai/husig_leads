@@ -171,7 +171,7 @@ export function DashboardHeader() {
                     {user?.email}
                   </p>
                   <span className={`text-xs font-medium ${getRoleBadgeColor(user?.role || 'intern')}`}>
-                    {user?.role?.charAt(0).toUpperCase() + user?.role?.slice(1) || 'Intern'}
+                    {(user?.role ?? 'intern').charAt(0).toUpperCase() + (user?.role ?? 'intern').slice(1)}
                   </span>
                 </div>
                 <DropdownMenuSeparator />

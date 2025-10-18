@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { Lead } from '@/types/database'
+import { Lead, LeadStatus } from '@/types/database'
 import { DashboardHeader } from '@/components/layout/DashboardHeader'
 import { LeadScoreBadge } from '@/components/leads/LeadScoreBadge'
 import NotesSystem from '@/components/leads/NotesSystem'
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+
 import { 
   ArrowLeft, 
   Edit, 
@@ -121,7 +122,7 @@ export default function LeadDetailPage() {
     }
   }
 
-  const handleStatusChange = (newStatus: string) => {
+  const handleStatusChange = (newStatus: LeadStatus) => {
     if (lead) {
       setLead({ ...lead, lead_status: newStatus })
     }
@@ -338,7 +339,7 @@ export default function LeadDetailPage() {
                     <div>
                       <p className="text-sm text-gray-500">Website</p>
                       <a 
-                        href={lead.company_website} 
+                        ref={lead.company_website} 
                         target="_blank" 
                         rel="noopener noreferrer"
                         className="text-husig-blue-400 hover:text-husig-blue-300 flex items-center"
