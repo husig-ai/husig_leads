@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { HuSigLogo } from '@/components/brand/HusigLogo'
+import { HuSigLogo } from '@/components/brand/HuSigLogo'
 import { Button } from '@/components/ui/button'
 import { 
   LayoutDashboard, 
