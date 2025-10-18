@@ -460,7 +460,7 @@ export default function LeadDetailPage() {
               <CardContent>
                 <StatusSelector 
                   leadId={lead.id} 
-                  currentStatus={lead.lead_status.charAt(0).toUpperCase() + lead.lead_status.slice(1).replace('_', ' ')} 
+                  currentStatus={lead.lead_status}
                   onStatusChange={handleStatusChange}
                 />
               </CardContent>
@@ -503,7 +503,7 @@ export default function LeadDetailPage() {
                 {lead.company_website && (
                   <Button 
                     className="w-full btn-husig-outline justify-start"
-                    onClick={() => window.open(lead.company_website, '_blank')}
+                    onClick={() => window.open(lead.company_website!, '_blank')}
                   >
                     <Globe className="w-4 h-4 mr-2" />
                     Visit Website

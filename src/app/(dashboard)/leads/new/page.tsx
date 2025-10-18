@@ -130,7 +130,6 @@ const onSubmit = async (data: LeadFormData) => {
       lead_status: 'new',
       lead_score: leadScore,
       created_by: user.id,
-      notes: data.notes || null
     }
 
     console.log('Inserting data:', leadData)
