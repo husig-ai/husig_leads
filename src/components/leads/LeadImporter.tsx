@@ -92,7 +92,7 @@ export default function LeadImporter({ onImportComplete }: { onImportComplete: (
         project_timeline: row.project_timeline || 'Flexible',
         budget_range: row.budget_range || null,
         lead_source: row.lead_source || 'Other',
-        lead_status: 'New',
+        lead_status: 'new',
         lead_score: 0,
         notes: row.notes || null,
       }

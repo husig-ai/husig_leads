@@ -98,7 +98,7 @@ export default function NewLeadPage() {
 
 const onSubmit = async (data: LeadFormData) => {
   setLoading(true)
-  console.log('Form submitted with data:', data) // Debug
+  console.log('Form submitted with data:', data)
   
   try {
     const supabase = createClient()
@@ -110,7 +110,6 @@ const onSubmit = async (data: LeadFormData) => {
 
     const leadScore = calculateLeadScore(data)
     
-    // Clean data to match database schema
     const leadData = {
       first_name: data.first_name,
       last_name: data.last_name,
@@ -127,14 +126,14 @@ const onSubmit = async (data: LeadFormData) => {
       pain_point: data.pain_point,
       project_timeline: data.project_timeline,
       budget_range: data.budget_range || null,
-      lead_source: data.lead_source || 'other',
+      lead_source: data.lead_source || 'Other',
       lead_status: 'new',
       lead_score: leadScore,
       created_by: user.id,
       notes: data.notes || null
     }
 
-    console.log('Inserting data:', leadData) // Debug
+    console.log('Inserting data:', leadData)
 
     const { data: result, error } = await supabase
       .from('leads')
@@ -143,7 +142,7 @@ const onSubmit = async (data: LeadFormData) => {
       .single()
 
     if (error) {
-      console.error('Database error:', error) // Debug
+      console.error('Database error:', error)
       throw error
     }
 
