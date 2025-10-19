@@ -1,6 +1,6 @@
 -- ============================================================================
--- HUSIG LEAD MANAGEMENT PLATFORM - COMPLETE DATABASE SCHEMA
--- Clean Version with Fixed Constraints
+-- HUSIG LEAD MANAGEMENT PLATFORM - UPDATED DATABASE SCHEMA
+-- Admin-Only Signup + Full Visibility for All Users
 -- ============================================================================
 
 -- Drop existing tables (for clean reset)
@@ -19,6 +19,13 @@ CREATE TABLE profiles (
   email TEXT,
   role TEXT CHECK (role IN ('admin', 'manager', 'intern')) DEFAULT 'intern',
   avatar_url TEXT,
+  -- New fields for admin-controlled access
+  is_approved BOOLEAN DEFAULT FALSE,
+  approved_by UUID REFERENCES auth.users(id),
+  approved_at TIMESTAMP WITH TIME ZONE,
+  invitation_token TEXT UNIQUE,
+  invited_by UUID REFERENCES auth.users(id),
+  invited_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -136,6 +143,12 @@ CREATE INDEX idx_activities_type ON activities(activity_type);
 CREATE INDEX idx_notes_lead_id ON notes(lead_id);
 CREATE INDEX idx_notes_created_at ON notes(created_at DESC);
 
+-- Profiles indexes
+CREATE INDEX idx_profiles_email ON profiles(email);
+CREATE INDEX idx_profiles_role ON profiles(role);
+CREATE INDEX idx_profiles_is_approved ON profiles(is_approved);
+CREATE INDEX idx_profiles_invitation_token ON profiles(invitation_token);
+
 -- ============================================================================
 -- FUNCTIONS
 -- ============================================================================
@@ -149,21 +162,42 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Function: Automatically create profile on user signup
+-- Function: Handle new user signup (UPDATED for admin approval)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, full_name, email, role)
-  VALUES (
-    NEW.id,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
-    NEW.email,
-    'intern'
-  );
+  -- Only create profile if user was invited (has invitation_token in metadata)
+  -- OR if it's the very first user (no profiles exist - bootstrap admin)
+  IF (
+    NEW.raw_user_meta_data->>'invitation_token' IS NOT NULL 
+    OR 
+    (SELECT COUNT(*) FROM public.profiles) = 0
+  ) THEN
+    INSERT INTO public.profiles (id, full_name, email, role, is_approved, invitation_token)
+    VALUES (
+      NEW.id,
+      COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
+      NEW.email,
+      CASE 
+        WHEN (SELECT COUNT(*) FROM public.profiles) = 0 THEN 'admin'  -- First user is admin
+        ELSE 'intern'
+      END,
+      CASE 
+        WHEN (SELECT COUNT(*) FROM public.profiles) = 0 THEN TRUE  -- First user is auto-approved
+        ELSE FALSE  -- Others need approval
+      END,
+      NEW.raw_user_meta_data->>'invitation_token'
+    );
+  ELSE
+    -- Reject unauthorized signups by deleting the auth user
+    DELETE FROM auth.users WHERE id = NEW.id;
+    RAISE EXCEPTION 'Unauthorized signup attempt. Users must be invited by an admin.';
+  END IF;
   RETURN NEW;
 EXCEPTION WHEN OTHERS THEN
-  RAISE WARNING 'Failed to create profile: %', SQLERRM;
-  RETURN NEW;
+  -- If anything fails, clean up the auth user
+  DELETE FROM auth.users WHERE id = NEW.id;
+  RAISE;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -270,9 +304,45 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Function: Approve user (for admins)
+CREATE OR REPLACE FUNCTION approve_user(user_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+  current_user_role TEXT;
+BEGIN
+  -- Check if current user is admin
+  SELECT role INTO current_user_role 
+  FROM profiles 
+  WHERE id = auth.uid();
+  
+  IF current_user_role != 'admin' THEN
+    RAISE EXCEPTION 'Only admins can approve users';
+  END IF;
+  
+  -- Approve the user
+  UPDATE profiles 
+  SET 
+    is_approved = TRUE,
+    approved_by = auth.uid(),
+    approved_at = NOW()
+  WHERE id = user_id;
+  
+  RETURN FOUND;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- ============================================================================
 -- TRIGGERS
 -- ============================================================================
+
+-- Drop existing triggers first (to avoid conflicts)
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP TRIGGER IF EXISTS update_leads_updated_at ON leads;
+DROP TRIGGER IF EXISTS update_notes_updated_at ON notes;
+DROP TRIGGER IF EXISTS lead_status_change_trigger ON leads;
+DROP TRIGGER IF EXISTS lead_creation_trigger ON leads;
+DROP TRIGGER IF EXISTS note_added_trigger ON notes;
+DROP TRIGGER IF EXISTS lead_update_trigger ON leads;
 
 -- Trigger: Create profile on user signup
 CREATE TRIGGER on_auth_user_created
@@ -330,127 +400,175 @@ ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
 -- RLS POLICIES: PROFILES
 -- ============================================================================
 
+-- Users can view their own profile
 CREATE POLICY "Users can view their own profile"
   ON profiles FOR SELECT
   USING (auth.uid() = id);
 
+-- Users can update their own profile (but not approval status)
 CREATE POLICY "Users can update their own profile"
   ON profiles FOR UPDATE
   USING (auth.uid() = id);
 
-CREATE POLICY "Admins and managers can view all profiles"
+-- Admins can view all profiles
+CREATE POLICY "Admins can view all profiles"
   ON profiles FOR SELECT
   USING (
     EXISTS (
       SELECT 1 FROM profiles 
       WHERE profiles.id = auth.uid() 
-      AND profiles.role IN ('admin', 'manager')
+      AND profiles.role = 'admin'
+      AND profiles.is_approved = TRUE
+    )
+  );
+
+-- Admins can update any profile
+CREATE POLICY "Admins can update any profile"
+  ON profiles FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE profiles.id = auth.uid() 
+      AND profiles.role = 'admin'
+      AND profiles.is_approved = TRUE
+    )
+  );
+
+-- Block access for non-approved users
+CREATE POLICY "Block non-approved users"
+  ON profiles FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE profiles.id = auth.uid() 
+      AND profiles.is_approved = TRUE
     )
   );
 
 -- ============================================================================
--- RLS POLICIES: LEADS
+-- RLS POLICIES: LEADS (UPDATED - All approved users can access everything)
 -- ============================================================================
 
-CREATE POLICY "Users can view their own leads or all if admin/manager"
+-- All approved users can view all leads
+CREATE POLICY "Approved users can view all leads"
   ON leads FOR SELECT
   USING (
-    created_by = auth.uid() 
-    OR 
     EXISTS (
       SELECT 1 FROM profiles 
       WHERE profiles.id = auth.uid() 
-      AND profiles.role IN ('admin', 'manager')
+      AND profiles.is_approved = TRUE
     )
   );
 
-CREATE POLICY "Users can insert leads"
+-- All approved users can insert leads
+CREATE POLICY "Approved users can insert leads"
   ON leads FOR INSERT
-  WITH CHECK (auth.uid() = created_by);
+  WITH CHECK (
+    auth.uid() = created_by 
+    AND EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE profiles.id = auth.uid() 
+      AND profiles.is_approved = TRUE
+    )
+  );
 
-CREATE POLICY "Users can update their own leads or all if admin/manager"
+-- All approved users can update all leads
+CREATE POLICY "Approved users can update all leads"
   ON leads FOR UPDATE
   USING (
-    created_by = auth.uid() 
-    OR 
     EXISTS (
       SELECT 1 FROM profiles 
       WHERE profiles.id = auth.uid() 
-      AND profiles.role IN ('admin', 'manager')
+      AND profiles.is_approved = TRUE
     )
   );
 
-CREATE POLICY "Users can delete their own leads or all if admin/manager"
+-- All approved users can delete all leads
+CREATE POLICY "Approved users can delete all leads"
   ON leads FOR DELETE
   USING (
-    created_by = auth.uid() 
-    OR 
     EXISTS (
       SELECT 1 FROM profiles 
       WHERE profiles.id = auth.uid() 
-      AND profiles.role IN ('admin', 'manager')
+      AND profiles.is_approved = TRUE
     )
   );
 
 -- ============================================================================
--- RLS POLICIES: ACTIVITIES
+-- RLS POLICIES: ACTIVITIES (UPDATED - All approved users can access everything)
 -- ============================================================================
 
-CREATE POLICY "Users can view activities for their leads or all if admin/manager"
+-- All approved users can view all activities
+CREATE POLICY "Approved users can view all activities"
   ON activities FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM leads 
-      WHERE leads.id = activities.lead_id 
-      AND (
-        leads.created_by = auth.uid() 
-        OR 
-        EXISTS (
-          SELECT 1 FROM profiles 
-          WHERE profiles.id = auth.uid() 
-          AND profiles.role IN ('admin', 'manager')
-        )
-      )
+      SELECT 1 FROM profiles 
+      WHERE profiles.id = auth.uid() 
+      AND profiles.is_approved = TRUE
     )
   );
 
-CREATE POLICY "Users can insert activities"
+-- All approved users can insert activities
+CREATE POLICY "Approved users can insert activities"
   ON activities FOR INSERT
-  WITH CHECK (auth.uid() = created_by);
+  WITH CHECK (
+    auth.uid() = created_by
+    AND EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE profiles.id = auth.uid() 
+      AND profiles.is_approved = TRUE
+    )
+  );
 
 -- ============================================================================
--- RLS POLICIES: NOTES
+-- RLS POLICIES: NOTES (UPDATED - All approved users can access everything)
 -- ============================================================================
 
-CREATE POLICY "Users can view notes for their leads or all if admin/manager"
+-- All approved users can view all notes
+CREATE POLICY "Approved users can view all notes"
   ON notes FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM leads 
-      WHERE leads.id = notes.lead_id 
-      AND (
-        leads.created_by = auth.uid() 
-        OR 
-        EXISTS (
-          SELECT 1 FROM profiles 
-          WHERE profiles.id = auth.uid() 
-          AND profiles.role IN ('admin', 'manager')
-        )
-      )
+      SELECT 1 FROM profiles 
+      WHERE profiles.id = auth.uid() 
+      AND profiles.is_approved = TRUE
     )
   );
 
-CREATE POLICY "Users can insert notes"
+-- All approved users can insert notes
+CREATE POLICY "Approved users can insert notes"
   ON notes FOR INSERT
-  WITH CHECK (auth.uid() = created_by);
+  WITH CHECK (
+    auth.uid() = created_by
+    AND EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE profiles.id = auth.uid() 
+      AND profiles.is_approved = TRUE
+    )
+  );
 
-CREATE POLICY "Users can update their own notes"
+-- All approved users can update all notes
+CREATE POLICY "Approved users can update all notes"
   ON notes FOR UPDATE
-  USING (auth.uid() = created_by);
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE profiles.id = auth.uid() 
+      AND profiles.is_approved = TRUE
+    )
+  );
 
-CREATE POLICY "Users can delete their own notes"
+-- All approved users can delete all notes
+CREATE POLICY "Approved users can delete all notes"
   ON notes FOR DELETE
-  USING (auth.uid() = created_by);
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE profiles.id = auth.uid() 
+      AND profiles.is_approved = TRUE
+    )
+  );
 
 -- ============================================================================
 -- VERIFICATION QUERIES (Optional - remove comments to run after setup)
