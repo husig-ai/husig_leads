@@ -97,96 +97,118 @@ export default function AdminUsersPage() {
     setCurrentUser(profile)
   }
 
-  const loadUsers = async () => {
-    try {
-      const supabase = createClient()
-      
-      // Get all users with their approver and inviter names
-      const { data, error } = await supabase
-        .from('profiles')
-        .select(`
-          *,
-          approver:approved_by(full_name),
-          inviter:invited_by(full_name)
-        `)
-        .order('created_at', { ascending: false })
+const loadUsers = async () => {
+  try {
+    const supabase = createClient()
+    
+    // Get all users first
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false })
 
-      if (error) throw error
+    if (error) throw error
 
-      const usersWithNames = data.map(user => ({
-        ...user,
-        approver_name: user.approver?.full_name,
-        inviter_name: user.inviter?.full_name
-      }))
+    // For each user, get the approver and inviter names separately if they exist
+    const usersWithNames = await Promise.all(
+      data.map(async (user) => {
+        let approver_name = null
+        let inviter_name = null
 
-      setUsers(usersWithNames)
-    } catch (error) {
-      console.error('Error loading users:', error)
-      toast({
-        title: "Error",
-        description: "Failed to load users",
-        variant: "destructive",
+        // Get approver name if approved_by exists
+        if (user.approved_by) {
+          const { data: approver } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.approved_by)
+            .single()
+          approver_name = approver?.full_name
+        }
+
+        // Get inviter name if invited_by exists
+        if (user.invited_by) {
+          const { data: inviter } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.invited_by)
+            .single()
+          inviter_name = inviter?.full_name
+        }
+
+        return {
+          ...user,
+          approver_name,
+          inviter_name
+        }
       })
-    } finally {
-      setLoading(false)
-    }
+    )
+
+    setUsers(usersWithNames)
+  } catch (error) {
+    console.error('Error loading users:', error)
+    toast({
+      title: "Error",
+      description: "Failed to load users",
+      variant: "destructive",
+    })
+  } finally {
+    setLoading(false)
+  }
+}
+
+const sendInvitation = async () => {
+  if (!inviteForm.email || !inviteForm.full_name) {
+    toast({
+      title: "Missing Information",
+      description: "Please fill in all required fields",
+      variant: "destructive",
+    })
+    return
   }
 
-  const sendInvitation = async () => {
-    if (!inviteForm.email || !inviteForm.full_name) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      })
-      return
+  setInviting(true)
+  try {
+    // Call our API route instead of using supabase.auth.admin directly
+    const response = await fetch('/api/admin/invite-user', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: inviteForm.email,
+        full_name: inviteForm.full_name,
+        role: inviteForm.role,
+      }),
+    })
+
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to send invitation')
     }
 
-    setInviting(true)
-    try {
-      const supabase = createClient()
-      
-      // Generate invitation token
-      const invitationToken = crypto.randomUUID()
-      
-      // Create invitation record (this would typically be a separate invitations table)
-      // For now, we'll use the auth.users metadata approach
-      
-      // Send invitation email through Supabase Auth
-      const { error } = await supabase.auth.admin.inviteUserByEmail(inviteForm.email, {
-        data: {
-          full_name: inviteForm.full_name,
-          role: inviteForm.role,
-          invitation_token: invitationToken,
-          invited_by: currentUser?.id
-        },
-        redirectTo: `${window.location.origin}/signup?token=${invitationToken}`
-      })
+    toast({
+      title: "Invitation Sent",
+      description: `Invitation email sent to ${inviteForm.email}`,
+    })
 
-      if (error) throw error
-
-      toast({
-        title: "Invitation Sent",
-        description: `Invitation email sent to ${inviteForm.email}`,
-      })
-
-      setInviteForm({ email: '', full_name: '', role: 'intern' })
-      setInviteDialogOpen(false)
-      
-      // Refresh users list
-      setTimeout(loadUsers, 1000)
-      
-    } catch (error: any) {
-      console.error('Error sending invitation:', error)
-      toast({
-        title: "Error",
-        description: error.message || "Failed to send invitation",
-        variant: "destructive",
-      })
-    } finally {
-      setInviting(false)
-    }
+    setInviteForm({ email: '', full_name: '', role: 'intern' })
+    setInviteDialogOpen(false)
+    
+    // Refresh users list
+    setTimeout(loadUsers, 1000)
+    
+  } catch (error: any) {
+    console.error('Error sending invitation:', error)
+    toast({
+      title: "Error",
+      description: error.message || "Failed to send invitation",
+      variant: "destructive",
+    })
+  } finally {
+    setInviting(false)
   }
+}
 
   const approveUser = async (userId: string) => {
     setProcessingUsers(prev => new Set(prev).add(userId))
