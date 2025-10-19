@@ -16,6 +16,7 @@ import {
   User,
   Calendar
 } from 'lucide-react'
+import { toast } from '@/components/ui/use-toast'
 
 interface Note {
   id: string
@@ -38,52 +39,55 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
   const [saving, setSaving] = useState(false)
+  const [currentUser, setCurrentUser] = useState<any>(null)
 
   useEffect(() => {
-    loadNotes()
+    loadNotesAndUser()
   }, [leadId])
 
-  const loadNotes = async () => {
+  const loadNotesAndUser = async () => {
     const supabase = createClient()
     
     try {
-      // Get notes
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser()
+      setCurrentUser(user)
+
+      // Get notes with user information
       const { data, error } = await supabase
         .from('notes')
-        .select('*')
+        .select(`
+          *,
+          profiles!notes_created_by_fkey(full_name)
+        `)
         .eq('lead_id', leadId)
         .order('created_at', { ascending: false })
 
       if (error) {
         console.error('Error loading notes:', error)
+        toast({
+          title: "Error",
+          description: "Failed to load notes",
+          variant: "destructive",
+        })
         setLoading(false)
         return
       }
 
-      if (data && data.length > 0) {
-        // Get unique user IDs
-        const userIds = [...new Set(data.map(note => note.created_by))]
-        
-        // Fetch user names
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .in('id', userIds)
-
-        // Map user names to notes
-        const profileMap = new Map(profiles?.map(p => [p.id, p.full_name]) || [])
-        
-        const notesWithNames = data.map(note => ({
-          ...note,
-          user_name: profileMap.get(note.created_by) || 'Unknown User'
-        }))
-        
-        setNotes(notesWithNames)
-      } else {
-        setNotes([])
-      }
+      // Format notes with user names
+      const notesWithNames = data?.map(note => ({
+        ...note,
+        user_name: note.profiles?.full_name || 'Unknown User'
+      })) || []
+      
+      setNotes(notesWithNames)
     } catch (error) {
       console.error('Error loading notes:', error)
+      toast({
+        title: "Error",
+        description: "Failed to load notes",
+        variant: "destructive",
+      })
       setNotes([])
     } finally {
       setLoading(false)
@@ -91,16 +95,26 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
   }
 
   const handleAddNote = async () => {
-    if (!newNoteContent.trim()) return
+    if (!newNoteContent.trim()) {
+      toast({
+        title: "Empty Note",
+        description: "Please enter some content for the note",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!currentUser) {
+      toast({
+        title: "Authentication Error",
+        description: "You must be logged in to add notes",
+        variant: "destructive",
+      })
+      return
+    }
 
     setSaving(true)
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      setSaving(false)
-      return
-    }
 
     try {
       const { error } = await supabase
@@ -108,15 +122,25 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
         .insert({
           lead_id: leadId,
           content: newNoteContent,
-          created_by: user.id,
+          created_by: currentUser.id,
         })
 
-      if (!error) {
-        setNewNoteContent('')
-        loadNotes()
-      }
-    } catch (error) {
+      if (error) throw error
+
+      setNewNoteContent('')
+      loadNotesAndUser()
+      
+      toast({
+        title: "Note Added",
+        description: "Your note has been added successfully",
+      })
+    } catch (error: any) {
       console.error('Error adding note:', error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add note",
+        variant: "destructive",
+      })
     } finally {
       setSaving(false)
     }
@@ -133,7 +157,14 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
   }
 
   const handleSaveEdit = async (noteId: string) => {
-    if (!editContent.trim()) return
+    if (!editContent.trim()) {
+      toast({
+        title: "Empty Note",
+        description: "Note content cannot be empty",
+        variant: "destructive",
+      })
+      return
+    }
 
     setSaving(true)
     const supabase = createClient()
@@ -144,20 +175,33 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
         .update({ content: editContent })
         .eq('id', noteId)
 
-      if (!error) {
-        setEditingNoteId(null)
-        setEditContent('')
-        loadNotes()
-      }
-    } catch (error) {
+      if (error) throw error
+
+      setEditingNoteId(null)
+      setEditContent('')
+      loadNotesAndUser()
+      
+      toast({
+        title: "Note Updated",
+        description: "Note has been updated successfully",
+      })
+    } catch (error: any) {
       console.error('Error updating note:', error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update note",
+        variant: "destructive",
+      })
     } finally {
       setSaving(false)
     }
   }
 
-  const handleDelete = async (noteId: string) => {
-    if (!confirm('Are you sure you want to delete this note? This action cannot be undone.')) {
+  const handleDelete = async (noteId: string, noteAuthor: string) => {
+    const currentUserName = currentUser?.email || 'You'
+    const authorName = notes.find(n => n.id === noteId)?.user_name || 'Unknown User'
+    
+    if (!confirm(`Are you sure you want to delete this note by ${authorName}? This action cannot be undone.`)) {
       return
     }
 
@@ -169,11 +213,21 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
         .delete()
         .eq('id', noteId)
 
-      if (!error) {
-        loadNotes()
-      }
-    } catch (error) {
+      if (error) throw error
+
+      loadNotesAndUser()
+      
+      toast({
+        title: "Note Deleted",
+        description: "Note has been deleted successfully",
+      })
+    } catch (error: any) {
       console.error('Error deleting note:', error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete note",
+        variant: "destructive",
+      })
     }
   }
 
@@ -209,6 +263,10 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
     return name.split(' ').map(n => n[0]).join('').toUpperCase()
   }
 
+  const isCurrentUserNote = (noteCreatedBy: string) => {
+    return currentUser?.id === noteCreatedBy
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -229,7 +287,7 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
           <div>
             <h3 className="text-lg font-semibold text-white">Notes & Comments</h3>
             <p className="text-sm text-gray-400">
-              {notes.length} {notes.length === 1 ? 'note' : 'notes'}
+              {notes.length} {notes.length === 1 ? 'note' : 'notes'} • All team members can view and edit
             </p>
           </div>
         </div>
@@ -244,7 +302,7 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
           </div>
           
           <Textarea
-            placeholder="Write a note about this lead..."
+            placeholder="Write a note about this lead... (All team members can see and edit notes)"
             rows={4}
             value={newNoteContent}
             onChange={(e) => setNewNoteContent(e.target.value)}
@@ -281,7 +339,7 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
           </div>
           <h3 className="text-lg font-medium text-white mb-2">No notes yet</h3>
           <p className="text-gray-400 max-w-sm mx-auto">
-            Start by adding your first note about this lead. Notes help track important information and conversations.
+            Start by adding your first note about this lead. All team members can view and contribute to the conversation.
           </p>
         </div>
       ) : (
@@ -338,56 +396,65 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
               ) : (
                 // View Mode
                 <>
-                  {/* Note content */}
-                  <div className="mb-4">
-                    <p className="text-gray-100 leading-relaxed whitespace-pre-wrap bg-gray-800/30 p-4 rounded-lg border border-gray-700/30">
-                      {note.content}
-                    </p>
-                  </div>
-                  
-                  {/* Note footer */}
-                  <div className="flex items-center justify-between pt-3 border-t border-gray-700/50">
-                    <div className="flex items-center space-x-3">
-                      <Avatar className="h-8 w-8 border-2 border-husig-purple-500/30">
-                        <AvatarFallback className="bg-husig-gradient text-white text-sm font-semibold">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-start space-x-3">
+                      <Avatar className="w-8 h-8 bg-husig-gradient">
+                        <AvatarFallback className="bg-husig-gradient text-white text-sm font-medium">
                           {getInitials(note.user_name || 'U')}
                         </AvatarFallback>
                       </Avatar>
-                      <div>
-                        <p className="text-sm font-medium text-white">
-                          {note.user_name || 'Unknown User'}
-                        </p>
-                        <div className="flex items-center space-x-2 text-xs text-gray-400">
-                          <Calendar className="w-3 h-3" />
-                          <span>{formatRelativeTime(note.created_at)}</span>
+                      
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <span className="font-medium text-white">
+                            {note.user_name}
+                            {isCurrentUserNote(note.created_by) && (
+                              <span className="text-xs text-husig-purple-400 ml-1">(You)</span>
+                            )}
+                          </span>
+                          <span className="text-xs text-gray-500">•</span>
+                          <span className="text-xs text-gray-400" title={formatDateTime(note.created_at)}>
+                            {formatRelativeTime(note.created_at)}
+                          </span>
                           {wasEdited(note.created_at, note.updated_at) && (
                             <>
-                              <span>•</span>
-                              <span className="italic text-yellow-400">edited</span>
+                              <span className="text-xs text-gray-500">•</span>
+                              <span className="text-xs text-gray-400" title={`Edited ${formatDateTime(note.updated_at)}`}>
+                                edited
+                              </span>
                             </>
                           )}
                         </div>
                       </div>
                     </div>
 
-                    {/* Action buttons */}
+                    {/* Action buttons - ALL users can edit/delete ANY note */}
                     <div className="flex items-center space-x-1">
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => handleStartEdit(note)}
                         className="text-gray-400 hover:text-husig-purple-400 hover:bg-husig-purple-500/10"
+                        title="Edit note"
                       >
                         <Edit2 className="h-4 w-4" />
                       </Button>
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => handleDelete(note.id)}
+                        onClick={() => handleDelete(note.id, note.created_by)}
                         className="text-gray-400 hover:text-red-400 hover:bg-red-500/10"
+                        title="Delete note"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
+                    </div>
+                  </div>
+
+                  {/* Note Content */}
+                  <div className="ml-11">
+                    <div className="text-gray-300 whitespace-pre-wrap leading-relaxed">
+                      {note.content}
                     </div>
                   </div>
                 </>

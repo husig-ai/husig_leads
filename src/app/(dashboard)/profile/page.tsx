@@ -23,19 +23,20 @@ import {
   Save,
   Loader2,
   LogOut,
-  Calendar
+  Calendar,
+  CheckCircle,
+  Clock,
+  AlertCircle,
+  Shield,
+  UserCheck
 } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
 
 const profileSchema = z.object({
   full_name: z.string().min(2, 'Full name must be at least 2 characters'),
-  email: z.string().email('Invalid email address'),
   phone: z.string().optional(),
-  company: z.string().optional(),
   job_title: z.string().optional(),
   bio: z.string().max(500, 'Bio must be less than 500 characters').optional(),
-  timezone: z.string().optional(),
-  theme: z.enum(['light', 'dark', 'system']).optional(),
 })
 
 type ProfileFormData = z.infer<typeof profileSchema>
@@ -45,15 +46,20 @@ interface UserProfile {
   email: string
   full_name?: string
   phone?: string
-  company?: string
   job_title?: string
   bio?: string
   avatar_url?: string
   role: string
+  is_approved: boolean
+  approved_by?: string
+  approved_at?: string
+  invited_by?: string
+  invited_at?: string
   created_at: string
   updated_at?: string
-  timezone?: string
-  theme?: string
+  // Related data
+  approver_name?: string
+  inviter_name?: string
 }
 
 export default function ProfilePage() {
@@ -90,54 +96,33 @@ export default function ProfilePage() {
         return
       }
 
-      // Try to get profile from profiles table
+      // Get profile with related user information
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('*')
+        .select(`
+          *,
+          approver:approved_by(full_name),
+          inviter:invited_by(full_name)
+        `)
         .eq('id', user.id)
         .single()
 
-      let userProfile: UserProfile
+      if (profileError) throw profileError
 
-      if (profileError && profileError.code === 'PGRST116') {
-        // Profile doesn't exist, create one
-        const newProfile = {
-          id: user.id,
-          email: user.email!,
-          full_name: user.user_metadata?.full_name || '',
-          phone: user.user_metadata?.phone || '',
-          company: 'HuSig Analytics',
-          job_title: '',
-          bio: '',
-          role: 'intern',
-          timezone: 'America/New_York',
-          theme: 'dark'
-        }
-
-        const { error: insertError } = await supabase
-          .from('profiles')
-          .insert([newProfile])
-
-        if (insertError) throw insertError
-        userProfile = { ...newProfile, created_at: new Date().toISOString() }
-      } else if (profileError) {
-        throw profileError
-      } else {
-        userProfile = profileData
+      const userProfile: UserProfile = {
+        ...profileData,
+        approver_name: profileData.approver?.full_name,
+        inviter_name: profileData.inviter?.full_name
       }
 
       setProfile(userProfile)
 
-      // Populate form
+      // Populate form with current data
       const formData: ProfileFormData = {
         full_name: userProfile.full_name || '',
-        email: userProfile.email,
         phone: userProfile.phone || '',
-        company: userProfile.company || 'HuSig Analytics',
         job_title: userProfile.job_title || '',
         bio: userProfile.bio || '',
-        timezone: userProfile.timezone || 'America/New_York',
-        theme: (userProfile.theme as 'light' | 'dark' | 'system') || 'dark',
       }
 
       reset(formData)
@@ -154,6 +139,8 @@ export default function ProfilePage() {
   }
 
   const onSubmit = async (data: ProfileFormData) => {
+    if (!profile) return
+
     setSaving(true)
     
     try {
@@ -165,22 +152,17 @@ export default function ProfilePage() {
         .update({
           full_name: data.full_name,
           phone: data.phone,
-          company: data.company,
           job_title: data.job_title,
           bio: data.bio,
-          timezone: data.timezone,
-          theme: data.theme,
-          updated_at: new Date().toISOString()
         })
-        .eq('id', profile?.id)
+        .eq('id', profile.id)
 
       if (updateError) throw updateError
 
-      // Update auth user metadata
+      // Update auth user metadata for full_name
       const { error: authUpdateError } = await supabase.auth.updateUser({
         data: {
           full_name: data.full_name,
-          phone: data.phone,
         }
       })
 
@@ -247,6 +229,16 @@ export default function ProfilePage() {
     })
   }
 
+  const formatDateTime = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
   const getRoleBadgeClass = (role: string) => {
     switch (role) {
       case 'admin': return 'bg-red-500/20 text-red-400 border-red-500/30'
@@ -254,6 +246,23 @@ export default function ProfilePage() {
       case 'intern': return 'bg-green-500/20 text-green-400 border-green-500/30'
       default: return 'bg-gray-500/20 text-gray-400 border-gray-500/30'
     }
+  }
+
+  const getApprovalStatusBadge = () => {
+    if (profile.is_approved) {
+      return (
+        <Badge className="bg-green-500/20 text-green-400 border-green-500/30 border">
+          <CheckCircle className="w-3 h-3 mr-1" />
+          Approved
+        </Badge>
+      )
+    }
+    return (
+      <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 border">
+        <Clock className="w-3 h-3 mr-1" />
+        Pending Approval
+      </Badge>
+    )
   }
 
   return (
@@ -266,8 +275,17 @@ export default function ProfilePage() {
           <h1 className="text-4xl font-bold text-white mb-2">
             <span className="text-husig-gradient">Profile</span>
           </h1>
-          <p className="text-gray-400 text-lg">Manage your account information</p>
+          <p className="text-gray-400 text-lg">Manage your account information and view approval status</p>
         </div>
+
+        {!profile.is_approved && (
+          <div className="mb-8 bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 rounded-lg p-4 flex items-start space-x-3">
+            <AlertCircle className="h-5 w-5 text-yellow-400 mt-0.5 flex-shrink-0" />
+            <div className="text-yellow-200">
+              Your account is pending admin approval. You have limited access until an administrator approves your account.
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Profile Summary Card */}
@@ -283,9 +301,14 @@ export default function ProfilePage() {
                   {profile.full_name || 'User'}
                 </h3>
                 <p className="text-gray-400 mb-3">{profile.job_title || 'Team Member'}</p>
-                <Badge className={`${getRoleBadgeClass(profile.role)} border`}>
-                  {profile.role.charAt(0).toUpperCase() + profile.role.slice(1)}
-                </Badge>
+                
+                <div className="flex flex-col items-center space-y-2 mb-4">
+                  <Badge className={`${getRoleBadgeClass(profile.role)} border`}>
+                    <Shield className="w-3 h-3 mr-1" />
+                    {profile.role.charAt(0).toUpperCase() + profile.role.slice(1)}
+                  </Badge>
+                  {getApprovalStatusBadge()}
+                </div>
                 
                 <Separator className="my-6 bg-gray-700" />
                 
@@ -295,14 +318,49 @@ export default function ProfilePage() {
                     <span className="truncate">{profile.email}</span>
                   </div>
                   <div className="flex items-center text-gray-400">
-                    <Building className="w-4 h-4 mr-2" />
-                    <span>{profile.company || 'HuSig Analytics'}</span>
-                  </div>
-                  <div className="flex items-center text-gray-400">
                     <Calendar className="w-4 h-4 mr-2" />
                     <span>Joined {formatDate(profile.created_at)}</span>
                   </div>
+                  {profile.phone && (
+                    <div className="flex items-center text-gray-400">
+                      <Phone className="w-4 h-4 mr-2" />
+                      <span>{profile.phone}</span>
+                    </div>
+                  )}
                 </div>
+
+                {/* Approval Information */}
+                {(profile.approved_at || profile.invited_at) && (
+                  <>
+                    <Separator className="my-6 bg-gray-700" />
+                    <div className="space-y-2 text-xs text-gray-500">
+                      {profile.invited_at && (
+                        <div className="flex items-center justify-between">
+                          <span>Invited:</span>
+                          <span>{formatDate(profile.invited_at)}</span>
+                        </div>
+                      )}
+                      {profile.inviter_name && (
+                        <div className="flex items-center justify-between">
+                          <span>Invited by:</span>
+                          <span className="text-gray-400">{profile.inviter_name}</span>
+                        </div>
+                      )}
+                      {profile.approved_at && (
+                        <div className="flex items-center justify-between">
+                          <span>Approved:</span>
+                          <span>{formatDate(profile.approved_at)}</span>
+                        </div>
+                      )}
+                      {profile.approver_name && (
+                        <div className="flex items-center justify-between">
+                          <span>Approved by:</span>
+                          <span className="text-gray-400">{profile.approver_name}</span>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
 
                 <Separator className="my-6 bg-gray-700" />
 
@@ -322,125 +380,113 @@ export default function ProfilePage() {
           <div className="lg:col-span-2">
             <Card className="card-husig-glass border-gray-700/50">
               <CardHeader>
-                <CardTitle className="flex items-center text-white">
-                  <User className="w-5 h-5 mr-2 text-husig-purple-400" />
-                  Edit Profile
+                <CardTitle className="text-xl font-semibold text-white flex items-center">
+                  <User className="w-5 h-5 mr-2" />
+                  Profile Information
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-6">
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-                  {/* Basic Info */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="full_name" className="text-gray-300">Full Name</Label>
-                      <Input
-                        id="full_name"
-                        {...register('full_name')}
-                        className="husig-input"
-                        placeholder="Enter your full name"
-                      />
-                      {errors.full_name && (
-                        <p className="text-red-400 text-sm mt-1">{errors.full_name.message}</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <Label htmlFor="email" className="text-gray-300">Email Address</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        {...register('email')}
-                        className="husig-input"
-                        placeholder="Enter your email"
-                        disabled
-                      />
-                      <p className="text-gray-500 text-xs mt-1">Email cannot be changed here</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="phone" className="text-gray-300">Phone Number</Label>
-                      <Input
-                        id="phone"
-                        {...register('phone')}
-                        className="husig-input"
-                        placeholder="Enter your phone number"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="job_title" className="text-gray-300">Job Title</Label>
-                      <Input
-                        id="job_title"
-                        {...register('job_title')}
-                        className="husig-input"
-                        placeholder="Enter your job title"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="company" className="text-gray-300">Company</Label>
+                  {/* Full Name */}
+                  <div className="space-y-2">
+                    <Label htmlFor="full_name" className="text-sm font-medium text-gray-300">
+                      Full Name *
+                    </Label>
                     <Input
-                      id="company"
-                      {...register('company')}
+                      id="full_name"
+                      {...register('full_name')}
                       className="husig-input"
-                      placeholder="Enter your company"
+                      placeholder="Enter your full name"
                     />
+                    {errors.full_name && (
+                      <p className="text-sm text-red-400">{errors.full_name.message}</p>
+                    )}
                   </div>
 
-                  <div>
-                    <Label htmlFor="bio" className="text-gray-300">Bio</Label>
+                  {/* Email (Read-only) */}
+                  <div className="space-y-2">
+                    <Label htmlFor="email" className="text-sm font-medium text-gray-300">
+                      Email Address
+                    </Label>
+                    <Input
+                      id="email"
+                      value={profile.email}
+                      disabled
+                      className="husig-input bg-gray-800/50 text-gray-400 cursor-not-allowed"
+                    />
+                    <p className="text-xs text-gray-500">Email cannot be changed</p>
+                  </div>
+
+                  {/* Phone */}
+                  <div className="space-y-2">
+                    <Label htmlFor="phone" className="text-sm font-medium text-gray-300">
+                      Phone Number
+                    </Label>
+                    <Input
+                      id="phone"
+                      {...register('phone')}
+                      className="husig-input"
+                      placeholder="Enter your phone number"
+                    />
+                    {errors.phone && (
+                      <p className="text-sm text-red-400">{errors.phone.message}</p>
+                    )}
+                  </div>
+
+                  {/* Job Title */}
+                  <div className="space-y-2">
+                    <Label htmlFor="job_title" className="text-sm font-medium text-gray-300">
+                      Job Title
+                    </Label>
+                    <Input
+                      id="job_title"
+                      {...register('job_title')}
+                      className="husig-input"
+                      placeholder="e.g., Data Analyst, Account Manager"
+                    />
+                    {errors.job_title && (
+                      <p className="text-sm text-red-400">{errors.job_title.message}</p>
+                    )}
+                  </div>
+
+                  {/* Bio */}
+                  <div className="space-y-2">
+                    <Label htmlFor="bio" className="text-sm font-medium text-gray-300">
+                      Bio
+                    </Label>
                     <Textarea
                       id="bio"
                       {...register('bio')}
-                      className="husig-textarea"
-                      placeholder="Tell us about yourself..."
-                      rows={3}
+                      rows={4}
+                      className="husig-textarea resize-none"
+                      placeholder="Tell us a bit about yourself..."
                     />
-                    <p className="text-gray-500 text-xs mt-1">
-                      {watchedData.bio?.length || 0}/500 characters
+                    {errors.bio && (
+                      <p className="text-sm text-red-400">{errors.bio.message}</p>
+                    )}
+                    <p className="text-xs text-gray-500">
+                      {watchedData.bio?.length || 0} / 500 characters
                     </p>
                   </div>
 
-                  {/* Preferences */}
-                  <Separator className="bg-gray-700" />
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="timezone" className="text-gray-300">Timezone</Label>
-                      <Select value={watchedData.timezone} onValueChange={(value) => setValue('timezone', value)}>
-                        <SelectTrigger className="husig-select">
-                          <SelectValue placeholder="Select timezone" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="America/New_York">Eastern Time</SelectItem>
-                          <SelectItem value="America/Chicago">Central Time</SelectItem>
-                          <SelectItem value="America/Denver">Mountain Time</SelectItem>
-                          <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
-                          <SelectItem value="UTC">UTC</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="theme" className="text-gray-300">Theme Preference</Label>
-                      <Select value={watchedData.theme} onValueChange={(value) => setValue('theme', value as any)}>
-                        <SelectTrigger className="husig-select">
-                          <SelectValue placeholder="Select theme" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="light">Light</SelectItem>
-                          <SelectItem value="dark">Dark</SelectItem>
-                          <SelectItem value="system">System</SelectItem>
-                        </SelectContent>
-                      </Select>
+                  {/* Role (Read-only) */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-gray-300">
+                      Role
+                    </Label>
+                    <div className="flex items-center space-x-2">
+                      <Badge className={`${getRoleBadgeClass(profile.role)} border`}>
+                        <Shield className="w-3 h-3 mr-1" />
+                        {profile.role.charAt(0).toUpperCase() + profile.role.slice(1)}
+                      </Badge>
+                      <span className="text-xs text-gray-500">
+                        Role can only be changed by administrators
+                      </span>
                     </div>
                   </div>
 
                   {/* Submit Button */}
-                  <div className="flex justify-end pt-4">
+                  <div className="flex justify-end pt-6">
                     <Button
                       type="submit"
                       disabled={!isDirty || saving}
