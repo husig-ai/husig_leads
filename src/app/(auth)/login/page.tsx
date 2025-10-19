@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { HuSigLogo } from '@/components/brand/HuSigLogo'
 import { Button } from '@/components/ui/button'
@@ -144,22 +143,13 @@ export default function LoginPage() {
                   <span className="bg-gray-800 px-2 text-gray-500">New to HuSig?</span>
                 </div>
               </div>
-              
-              <p className="text-center">
-                <Link 
-                  href="/signup" 
-                  className="text-husig-purple-400 hover:text-husig-purple-300 font-medium text-base transition-colors"
-                >
-                  Create your account
-                </Link>
-              </p>
             </CardFooter>
           </form>
         </Card>
 
         {/* Footer */}
         <div className="text-center mt-8 text-sm text-gray-500">
-          <p>&copy; 2024 HuSig.ai. All rights reserved.</p>
+          <p>&copy; 2025 HuSig.ai. All rights reserved.</p>
           <p className="mt-1 text-husig-blue-400">Data, LLM & AI Solutions at Scale</p>
         </div>
       </div>
