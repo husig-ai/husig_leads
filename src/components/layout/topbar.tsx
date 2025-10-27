@@ -39,8 +39,8 @@ export function TopBar() {
           <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
             {profile?.full_name || 'User'}
           </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
-            {profile?.role || 'intern'}
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {profile?.email || ''}
           </p>
         </div>
         <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-semibold">
