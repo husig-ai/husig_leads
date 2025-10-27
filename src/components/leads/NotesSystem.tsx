@@ -13,7 +13,6 @@ import {
   X,
   Plus,
   Loader2,
-  User,
   Calendar
 } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
@@ -22,10 +21,14 @@ interface Note {
   id: string
   lead_id: string
   content: string
+  note_type: string
+  is_private: boolean
   created_by: string
   created_at: string
   updated_at: string
+  // User info
   user_name?: string
+  user_email?: string
 }
 
 interface NotesSystemProps {
@@ -51,44 +54,64 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
     try {
       // Get current user
       const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        console.error('No authenticated user')
+        setLoading(false)
+        return
+      }
       setCurrentUser(user)
 
-      // Get notes with user information
-      const { data, error } = await supabase
+      // Get notes with user information - simplified approach
+      const { data: notesData, error: notesError } = await supabase
         .from('notes')
-        .select(`
-          *,
-          profiles!notes_created_by_fkey(full_name)
-        `)
+        .select('*')
         .eq('lead_id', leadId)
         .order('created_at', { ascending: false })
 
-      if (error) {
-        console.error('Error loading notes:', error)
+      if (notesError) {
+        console.error('Error loading notes:', notesError)
         toast({
           title: "Error",
-          description: "Failed to load notes",
+          description: "Failed to load notes: " + notesError.message,
           variant: "destructive",
         })
         setLoading(false)
         return
       }
 
-      // Format notes with user names
-      const notesWithNames = data?.map(note => ({
-        ...note,
-        user_name: note.profiles?.full_name || 'Unknown User'
-      })) || []
-      
-      setNotes(notesWithNames)
+      // Get user names for the notes
+      if (notesData && notesData.length > 0) {
+        const userIds = [...new Set(notesData.map(note => note.created_by))]
+        
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', userIds)
+
+        if (profilesError) {
+          console.error('Error loading profiles:', profilesError)
+          // Still show notes without user names
+        }
+
+        // Map user names to notes
+        const notesWithNames = notesData.map(note => ({
+          ...note,
+          user_name: profilesData?.find(p => p.id === note.created_by)?.full_name || 'Unknown User',
+          user_email: profilesData?.find(p => p.id === note.created_by)?.email || ''
+        }))
+
+        setNotes(notesWithNames)
+      } else {
+        setNotes([])
+      }
+
     } catch (error) {
-      console.error('Error loading notes:', error)
+      console.error('Error in loadNotesAndUser:', error)
       toast({
         title: "Error",
         description: "Failed to load notes",
         variant: "destructive",
       })
-      setNotes([])
     } finally {
       setLoading(false)
     }
@@ -117,16 +140,23 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
     const supabase = createClient()
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('notes')
         .insert({
           lead_id: leadId,
           content: newNoteContent,
+          note_type: 'general',
+          is_private: false,
           created_by: currentUser.id,
         })
+        .select()
 
-      if (error) throw error
+      if (error) {
+        console.error('Insert error:', error)
+        throw error
+      }
 
+      console.log('Note added successfully:', data)
       setNewNoteContent('')
       loadNotesAndUser()
       
@@ -197,11 +227,8 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
     }
   }
 
-  const handleDelete = async (noteId: string, noteAuthor: string) => {
-    const currentUserName = currentUser?.email || 'You'
-    const authorName = notes.find(n => n.id === noteId)?.user_name || 'Unknown User'
-    
-    if (!confirm(`Are you sure you want to delete this note by ${authorName}? This action cannot be undone.`)) {
+  const handleDelete = async (noteId: string) => {
+    if (!confirm('Are you sure you want to delete this note? This action cannot be undone.')) {
       return
     }
 
@@ -260,7 +287,8 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
   }
 
   const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase()
+    if (!name || name === 'Unknown User') return '?'
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
   }
 
   const isCurrentUserNote = (noteCreatedBy: string) => {
@@ -306,7 +334,7 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
             rows={4}
             value={newNoteContent}
             onChange={(e) => setNewNoteContent(e.target.value)}
-            className="husig-textarea resize-none bg-gray-800/50 border-gray-600 text-white placeholder-gray-400 focus:border-husig-purple-500 focus:ring-husig-purple-500/20"
+            className="bg-gray-800/50 border-gray-600 text-white placeholder-gray-400 focus:border-husig-purple-500 focus:ring-husig-purple-500/20 resize-none"
           />
           
           <div className="flex justify-end">
@@ -344,10 +372,10 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
         </div>
       ) : (
         <div className="space-y-4">
-          {notes.map((note, index) => (
+          {notes.map((note) => (
             <div
               key={note.id}
-              className="bg-gradient-to-br from-gray-800/50 to-gray-900/30 rounded-xl p-5 border border-gray-700/50 backdrop-blur-sm hover:border-husig-purple-500/30 transition-all duration-300 shadow-lg hover:shadow-husig"
+              className="bg-gradient-to-br from-gray-800/50 to-gray-900/30 rounded-xl p-5 border border-gray-700/50 backdrop-blur-sm hover:border-husig-purple-500/30 transition-all duration-300"
             >
               {editingNoteId === note.id ? (
                 // Edit Mode
@@ -361,7 +389,7 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
                     value={editContent}
                     onChange={(e) => setEditContent(e.target.value)}
                     rows={4}
-                    className="husig-textarea resize-none bg-gray-800/50 border-gray-600 text-white placeholder-gray-400 focus:border-husig-purple-500 focus:ring-husig-purple-500/20"
+                    className="bg-gray-800/50 border-gray-600 text-white placeholder-gray-400 focus:border-husig-purple-500 focus:ring-husig-purple-500/20 resize-none"
                   />
                   
                   <div className="flex justify-end space-x-2">
@@ -407,7 +435,7 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
                       <div className="flex-1">
                         <div className="flex items-center space-x-2 mb-1">
                           <span className="font-medium text-white">
-                            {note.user_name}
+                            {note.user_name || 'Unknown User'}
                             {isCurrentUserNote(note.created_by) && (
                               <span className="text-xs text-husig-purple-400 ml-1">(You)</span>
                             )}
@@ -431,31 +459,29 @@ export default function NotesSystem({ leadId }: NotesSystemProps) {
                     {/* Action buttons - ALL users can edit/delete ANY note */}
                     <div className="flex items-center space-x-1">
                       <Button
-                        size="sm"
                         variant="ghost"
+                        size="sm"
                         onClick={() => handleStartEdit(note)}
-                        className="text-gray-400 hover:text-husig-purple-400 hover:bg-husig-purple-500/10"
-                        title="Edit note"
+                        className="text-gray-400 hover:text-yellow-400 hover:bg-yellow-500/10"
                       >
-                        <Edit2 className="h-4 w-4" />
+                        <Edit2 className="w-4 h-4" />
                       </Button>
                       <Button
-                        size="sm"
                         variant="ghost"
-                        onClick={() => handleDelete(note.id, note.created_by)}
+                        size="sm"
+                        onClick={() => handleDelete(note.id)}
                         className="text-gray-400 hover:text-red-400 hover:bg-red-500/10"
-                        title="Delete note"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
                   </div>
 
                   {/* Note Content */}
-                  <div className="ml-11">
-                    <div className="text-gray-300 whitespace-pre-wrap leading-relaxed">
+                  <div className="prose prose-invert max-w-none">
+                    <p className="text-gray-300 leading-relaxed whitespace-pre-wrap">
                       {note.content}
-                    </div>
+                    </p>
                   </div>
                 </>
               )}
