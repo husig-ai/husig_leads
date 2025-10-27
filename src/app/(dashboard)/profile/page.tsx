@@ -11,75 +11,61 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { Badge } from '@/components/ui/badge'
 import { 
   User, 
   Mail, 
-  Phone, 
-  Building, 
   Save,
   Loader2,
-  LogOut,
   Calendar,
-  CheckCircle,
-  Clock,
-  AlertCircle,
-  Shield,
-  UserCheck
+  Lock,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
 
 const profileSchema = z.object({
   full_name: z.string().min(2, 'Full name must be at least 2 characters'),
-  phone: z.string().optional(),
-  job_title: z.string().optional(),
-  bio: z.string().max(500, 'Bio must be less than 500 characters').optional(),
+})
+
+const passwordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string().min(8, 'New password must be at least 8 characters'),
+  confirmPassword: z.string()
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
 })
 
 type ProfileFormData = z.infer<typeof profileSchema>
+type PasswordFormData = z.infer<typeof passwordSchema>
 
 interface UserProfile {
   id: string
   email: string
   full_name?: string
-  phone?: string
-  job_title?: string
-  bio?: string
   avatar_url?: string
-  role: string
-  is_approved: boolean
-  approved_by?: string
-  approved_at?: string
-  invited_by?: string
-  invited_at?: string
   created_at: string
   updated_at?: string
-  // Related data
-  approver_name?: string
-  inviter_name?: string
 }
 
 export default function ProfilePage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [changingPassword, setChangingPassword] = useState(false)
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isDirty },
-    setValue,
-    watch,
-    reset
-  } = useForm<ProfileFormData>({
+  const profileForm = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
   })
 
-  const watchedData = watch()
+  const passwordForm = useForm<PasswordFormData>({
+    resolver: zodResolver(passwordSchema),
+  })
 
   useEffect(() => {
     loadProfile()
@@ -88,49 +74,44 @@ export default function ProfilePage() {
   const loadProfile = async () => {
     try {
       const supabase = createClient()
+      
+      // Check if user is authenticated
       const { data: { user }, error: userError } = await supabase.auth.getUser()
-
-      if (userError) throw userError
-      if (!user) {
+      
+      if (userError || !user) {
         router.push('/login')
         return
       }
 
-      // Get profile with related user information
+      // Get user profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select(`
-          *,
-          approver:approved_by(full_name),
-          inviter:invited_by(full_name)
-        `)
+        .select('*')
         .eq('id', user.id)
         .single()
 
-      if (profileError) throw profileError
-
-      const userProfile: UserProfile = {
-        ...profileData,
-        approver_name: profileData.approver?.full_name,
-        inviter_name: profileData.inviter?.full_name
+      if (profileError) {
+        console.error('Error loading profile:', profileError)
+        toast({
+          title: "Error",
+          description: "Failed to load profile",
+          variant: "destructive",
+        })
+        return
       }
 
-      setProfile(userProfile)
-
-      // Populate form with current data
-      const formData: ProfileFormData = {
-        full_name: userProfile.full_name || '',
-        phone: userProfile.phone || '',
-        job_title: userProfile.job_title || '',
-        bio: userProfile.bio || '',
-      }
-
-      reset(formData)
+      setProfile(profileData)
+      
+      // Reset form with profile data
+      profileForm.reset({
+        full_name: profileData.full_name || '',
+      })
+      
     } catch (error) {
-      console.error('Error loading profile:', error)
+      console.error('Error in loadProfile:', error)
       toast({
         title: "Error",
-        description: "Failed to load profile data",
+        description: "Failed to load profile",
         variant: "destructive",
       })
     } finally {
@@ -138,43 +119,38 @@ export default function ProfilePage() {
     }
   }
 
-  const onSubmit = async (data: ProfileFormData) => {
+  const onProfileSubmit = async (data: ProfileFormData) => {
     if (!profile) return
-
-    setSaving(true)
     
+    setSaving(true)
     try {
       const supabase = createClient()
       
-      // Update profiles table
-      const { error: updateError } = await supabase
+      const { error } = await supabase
         .from('profiles')
         .update({
           full_name: data.full_name,
-          phone: data.phone,
-          job_title: data.job_title,
-          bio: data.bio,
         })
         .eq('id', profile.id)
 
-      if (updateError) throw updateError
-
-      // Update auth user metadata for full_name
-      const { error: authUpdateError } = await supabase.auth.updateUser({
-        data: {
-          full_name: data.full_name,
-        }
-      })
-
-      if (authUpdateError) throw authUpdateError
+      if (error) {
+        console.error('Error updating profile:', error)
+        toast({
+          title: "Error",
+          description: "Failed to update profile",
+          variant: "destructive",
+        })
+        return
+      }
 
       toast({
-        title: "Success!",
+        title: "Success",
         description: "Profile updated successfully",
       })
 
-      // Reload profile data
-      await loadProfile()
+      // Reload profile to get updated data
+      loadProfile()
+      
     } catch (error) {
       console.error('Error updating profile:', error)
       toast({
@@ -187,20 +163,77 @@ export default function ProfilePage() {
     }
   }
 
-  const handleSignOut = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/login')
+  const onPasswordSubmit = async (data: PasswordFormData) => {
+    setChangingPassword(true)
+    
+    try {
+      const supabase = createClient()
+      
+      // First verify current password by trying to sign in
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: profile!.email,
+        password: data.currentPassword,
+      })
+
+      if (verifyError) {
+        toast({
+          title: "Error",
+          description: "Current password is incorrect",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Update password
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: data.newPassword
+      })
+
+      if (updateError) {
+        console.error('Error updating password:', updateError)
+        toast({
+          title: "Error",
+          description: "Failed to update password",
+          variant: "destructive",
+        })
+        return
+      }
+
+      toast({
+        title: "Success",
+        description: "Password updated successfully",
+      })
+
+      // Reset password form
+      passwordForm.reset()
+      
+    } catch (error) {
+      console.error('Error changing password:', error)
+      toast({
+        title: "Error",
+        description: "Failed to update password",
+        variant: "destructive",
+      })
+    } finally {
+      setChangingPassword(false)
+    }
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
   }
 
   if (loading) {
     return (
       <div className="min-h-screen bg-husig-dark">
         <DashboardHeader />
-        <div className="flex items-center justify-center h-96">
-          <div className="text-center">
-            <Loader2 className="w-8 h-8 animate-spin text-husig-purple-500 mx-auto mb-4" />
-            <div className="text-lg text-gray-300">Loading profile...</div>
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex items-center justify-center h-32">
+            <Loader2 className="h-8 w-8 animate-spin text-husig-purple-400" />
           </div>
         </div>
       </div>
@@ -214,54 +247,10 @@ export default function ProfilePage() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-white mb-4">Profile Not Found</h1>
-            <p className="text-gray-400">Unable to load your profile data.</p>
+            <p className="text-gray-400">Unable to load your profile information.</p>
           </div>
         </div>
       </div>
-    )
-  }
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
-  }
-
-  const formatDateTime = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
-
-  const getRoleBadgeClass = (role: string) => {
-    switch (role) {
-      case 'admin': return 'bg-red-500/20 text-red-400 border-red-500/30'
-      case 'manager': return 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-      case 'intern': return 'bg-green-500/20 text-green-400 border-green-500/30'
-      default: return 'bg-gray-500/20 text-gray-400 border-gray-500/30'
-    }
-  }
-
-  const getApprovalStatusBadge = () => {
-    if (profile.is_approved) {
-      return (
-        <Badge className="bg-green-500/20 text-green-400 border-green-500/30 border">
-          <CheckCircle className="w-3 h-3 mr-1" />
-          Approved
-        </Badge>
-      )
-    }
-    return (
-      <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 border">
-        <Clock className="w-3 h-3 mr-1" />
-        Pending Approval
-      </Badge>
     )
   }
 
@@ -270,226 +259,52 @@ export default function ProfilePage() {
       <DashboardHeader />
       
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">
-            <span className="text-husig-gradient">Profile</span>
-          </h1>
-          <p className="text-gray-400 text-lg">Manage your account information and view approval status</p>
+          <h1 className="text-3xl font-bold text-white mb-2">Profile Settings</h1>
+          <p className="text-gray-400">Manage your account information and security</p>
         </div>
 
-        {!profile.is_approved && (
-          <div className="mb-8 bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 rounded-lg p-4 flex items-start space-x-3">
-            <AlertCircle className="h-5 w-5 text-yellow-400 mt-0.5 flex-shrink-0" />
-            <div className="text-yellow-200">
-              Your account is pending admin approval. You have limited access until an administrator approves your account.
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Profile Summary Card */}
-          <div className="lg:col-span-1">
-            <Card className="card-husig-glass border-gray-700/50">
-              <CardContent className="p-6 text-center">
-                <div className="w-24 h-24 bg-husig-gradient rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-white text-2xl font-bold">
-                    {profile.full_name ? profile.full_name.split(' ').map(n => n[0]).join('') : 'U'}
-                  </span>
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-1">
-                  {profile.full_name || 'User'}
-                </h3>
-                <p className="text-gray-400 mb-3">{profile.job_title || 'Team Member'}</p>
-                
-                <div className="flex flex-col items-center space-y-2 mb-4">
-                  <Badge className={`${getRoleBadgeClass(profile.role)} border`}>
-                    <Shield className="w-3 h-3 mr-1" />
-                    {profile.role.charAt(0).toUpperCase() + profile.role.slice(1)}
-                  </Badge>
-                  {getApprovalStatusBadge()}
-                </div>
-                
-                <Separator className="my-6 bg-gray-700" />
-                
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center text-gray-400">
-                    <Mail className="w-4 h-4 mr-2" />
-                    <span className="truncate">{profile.email}</span>
-                  </div>
-                  <div className="flex items-center text-gray-400">
-                    <Calendar className="w-4 h-4 mr-2" />
-                    <span>Joined {formatDate(profile.created_at)}</span>
-                  </div>
-                  {profile.phone && (
-                    <div className="flex items-center text-gray-400">
-                      <Phone className="w-4 h-4 mr-2" />
-                      <span>{profile.phone}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Approval Information */}
-                {(profile.approved_at || profile.invited_at) && (
-                  <>
-                    <Separator className="my-6 bg-gray-700" />
-                    <div className="space-y-2 text-xs text-gray-500">
-                      {profile.invited_at && (
-                        <div className="flex items-center justify-between">
-                          <span>Invited:</span>
-                          <span>{formatDate(profile.invited_at)}</span>
-                        </div>
-                      )}
-                      {profile.inviter_name && (
-                        <div className="flex items-center justify-between">
-                          <span>Invited by:</span>
-                          <span className="text-gray-400">{profile.inviter_name}</span>
-                        </div>
-                      )}
-                      {profile.approved_at && (
-                        <div className="flex items-center justify-between">
-                          <span>Approved:</span>
-                          <span>{formatDate(profile.approved_at)}</span>
-                        </div>
-                      )}
-                      {profile.approver_name && (
-                        <div className="flex items-center justify-between">
-                          <span>Approved by:</span>
-                          <span className="text-gray-400">{profile.approver_name}</span>
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-
-                <Separator className="my-6 bg-gray-700" />
-
-                <Button 
-                  variant="outline" 
-                  onClick={handleSignOut}
-                  className="w-full btn-husig-outline text-red-400 border-red-500/30 hover:bg-red-500/10"
-                >
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Sign Out
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-
+        <div className="grid gap-6 lg:grid-cols-3">
           {/* Profile Form */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 space-y-6">
+            {/* Personal Information */}
             <Card className="card-husig-glass border-gray-700/50">
               <CardHeader>
-                <CardTitle className="text-xl font-semibold text-white flex items-center">
-                  <User className="w-5 h-5 mr-2" />
-                  Profile Information
+                <CardTitle className="flex items-center text-white">
+                  <User className="w-5 h-5 mr-2 text-husig-purple-400" />
+                  Personal Information
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-6">
-                <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-                  {/* Full Name */}
+              <CardContent>
+                <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-6">
                   <div className="space-y-2">
-                    <Label htmlFor="full_name" className="text-sm font-medium text-gray-300">
-                      Full Name *
+                    <Label htmlFor="full_name" className="text-gray-300">
+                      Full Name
                     </Label>
                     <Input
                       id="full_name"
-                      {...register('full_name')}
-                      className="husig-input"
+                      {...profileForm.register('full_name')}
                       placeholder="Enter your full name"
+                      className="bg-gray-800/50 border-gray-600 text-white placeholder-gray-400"
                     />
-                    {errors.full_name && (
-                      <p className="text-sm text-red-400">{errors.full_name.message}</p>
+                    {profileForm.formState.errors.full_name && (
+                      <p className="text-sm text-red-400">{profileForm.formState.errors.full_name.message}</p>
                     )}
                   </div>
 
-                  {/* Email (Read-only) */}
                   <div className="space-y-2">
-                    <Label htmlFor="email" className="text-sm font-medium text-gray-300">
-                      Email Address
-                    </Label>
-                    <Input
-                      id="email"
-                      value={profile.email}
-                      disabled
-                      className="husig-input bg-gray-800/50 text-gray-400 cursor-not-allowed"
-                    />
-                    <p className="text-xs text-gray-500">Email cannot be changed</p>
-                  </div>
-
-                  {/* Phone */}
-                  <div className="space-y-2">
-                    <Label htmlFor="phone" className="text-sm font-medium text-gray-300">
-                      Phone Number
-                    </Label>
-                    <Input
-                      id="phone"
-                      {...register('phone')}
-                      className="husig-input"
-                      placeholder="Enter your phone number"
-                    />
-                    {errors.phone && (
-                      <p className="text-sm text-red-400">{errors.phone.message}</p>
-                    )}
-                  </div>
-
-                  {/* Job Title */}
-                  <div className="space-y-2">
-                    <Label htmlFor="job_title" className="text-sm font-medium text-gray-300">
-                      Job Title
-                    </Label>
-                    <Input
-                      id="job_title"
-                      {...register('job_title')}
-                      className="husig-input"
-                      placeholder="e.g., Data Analyst, Account Manager"
-                    />
-                    {errors.job_title && (
-                      <p className="text-sm text-red-400">{errors.job_title.message}</p>
-                    )}
-                  </div>
-
-                  {/* Bio */}
-                  <div className="space-y-2">
-                    <Label htmlFor="bio" className="text-sm font-medium text-gray-300">
-                      Bio
-                    </Label>
-                    <Textarea
-                      id="bio"
-                      {...register('bio')}
-                      rows={4}
-                      className="husig-textarea resize-none"
-                      placeholder="Tell us a bit about yourself..."
-                    />
-                    {errors.bio && (
-                      <p className="text-sm text-red-400">{errors.bio.message}</p>
-                    )}
-                    <p className="text-xs text-gray-500">
-                      {watchedData.bio?.length || 0} / 500 characters
-                    </p>
-                  </div>
-
-                  {/* Role (Read-only) */}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-gray-300">
-                      Role
-                    </Label>
-                    <div className="flex items-center space-x-2">
-                      <Badge className={`${getRoleBadgeClass(profile.role)} border`}>
-                        <Shield className="w-3 h-3 mr-1" />
-                        {profile.role.charAt(0).toUpperCase() + profile.role.slice(1)}
-                      </Badge>
-                      <span className="text-xs text-gray-500">
-                        Role can only be changed by administrators
-                      </span>
+                    <Label className="text-gray-300">Email Address</Label>
+                    <div className="flex items-center space-x-3 p-3 bg-gray-800/30 rounded-lg border border-gray-600">
+                      <Mail className="w-4 h-4 text-gray-400" />
+                      <span className="text-gray-300">{profile.email}</span>
+                      <span className="text-xs text-gray-500 ml-auto">Cannot be changed</span>
                     </div>
                   </div>
 
-                  {/* Submit Button */}
-                  <div className="flex justify-end pt-6">
-                    <Button
-                      type="submit"
-                      disabled={!isDirty || saving}
+                  <div className="flex justify-end">
+                    <Button 
+                      type="submit" 
+                      disabled={saving || !profileForm.formState.isDirty}
                       className="btn-husig-primary"
                     >
                       {saving ? (
@@ -506,6 +321,148 @@ export default function ProfilePage() {
                     </Button>
                   </div>
                 </form>
+              </CardContent>
+            </Card>
+
+            {/* Password Change */}
+            <Card className="card-husig-glass border-gray-700/50">
+              <CardHeader>
+                <CardTitle className="flex items-center text-white">
+                  <Lock className="w-5 h-5 mr-2 text-husig-purple-400" />
+                  Change Password
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="currentPassword" className="text-gray-300">
+                      Current Password
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="currentPassword"
+                        type={showCurrentPassword ? 'text' : 'password'}
+                        {...passwordForm.register('currentPassword')}
+                        placeholder="Enter your current password"
+                        className="bg-gray-800/50 border-gray-600 text-white placeholder-gray-400 pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent text-gray-400 hover:text-gray-300"
+                        onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                      >
+                        {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    {passwordForm.formState.errors.currentPassword && (
+                      <p className="text-sm text-red-400">{passwordForm.formState.errors.currentPassword.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="newPassword" className="text-gray-300">
+                      New Password
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="newPassword"
+                        type={showNewPassword ? 'text' : 'password'}
+                        {...passwordForm.register('newPassword')}
+                        placeholder="Enter your new password"
+                        className="bg-gray-800/50 border-gray-600 text-white placeholder-gray-400 pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent text-gray-400 hover:text-gray-300"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                      >
+                        {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    {passwordForm.formState.errors.newPassword && (
+                      <p className="text-sm text-red-400">{passwordForm.formState.errors.newPassword.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmPassword" className="text-gray-300">
+                      Confirm New Password
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="confirmPassword"
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        {...passwordForm.register('confirmPassword')}
+                        placeholder="Confirm your new password"
+                        className="bg-gray-800/50 border-gray-600 text-white placeholder-gray-400 pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent text-gray-400 hover:text-gray-300"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    {passwordForm.formState.errors.confirmPassword && (
+                      <p className="text-sm text-red-400">{passwordForm.formState.errors.confirmPassword.message}</p>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button 
+                      type="submit" 
+                      disabled={changingPassword}
+                      className="btn-husig-primary"
+                    >
+                      {changingPassword ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Changing Password...
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="w-4 h-4 mr-2" />
+                          Change Password
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Account Information */}
+          <div className="space-y-6">
+            <Card className="card-husig-glass border-gray-700/50">
+              <CardHeader>
+                <CardTitle className="text-white">Account Information</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center space-x-3">
+                  <Calendar className="w-4 h-4 text-gray-400" />
+                  <div>
+                    <p className="text-sm text-gray-400">Member since</p>
+                    <p className="text-gray-300">{formatDate(profile.created_at)}</p>
+                  </div>
+                </div>
+
+                {profile.updated_at && (
+                  <div className="flex items-center space-x-3">
+                    <Save className="w-4 h-4 text-gray-400" />
+                    <div>
+                      <p className="text-sm text-gray-400">Last updated</p>
+                      <p className="text-gray-300">{formatDate(profile.updated_at)}</p>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

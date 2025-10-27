@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Check, X, Loader2, ArrowRight } from 'lucide-react'
+import { toast } from '@/components/ui/use-toast'
 
 interface StatusSelectorProps {
   leadId: string
@@ -15,17 +16,54 @@ interface StatusSelectorProps {
 }
 
 const statusConfig = {
-  'new': { color: 'bg-blue-500/20 text-blue-400 border-blue-500/30', icon: '🆕', label: 'New' },
-  'qualifying': { color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30', icon: '📞', label: 'Qualifying' },
-  'qualified': { color: 'bg-green-500/20 text-green-400 border-green-500/30', icon: '✅', label: 'Qualified' },
-  'nurturing': { color: 'bg-purple-500/20 text-purple-400 border-purple-500/30', icon: '🌱', label: 'Nurturing' },
-  'demo_scheduled': { color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30', icon: '📅', label: 'Demo Scheduled' },
-  'demo_completed': { color: 'bg-pink-500/20 text-pink-400 border-pink-500/30', icon: '✨', label: 'Demo Completed' },
-  'proposal_sent': { color: 'bg-orange-500/20 text-orange-400 border-orange-500/30', icon: '📋', label: 'Proposal Sent' },
-  'negotiating': { color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30', icon: '🤝', label: 'Negotiating' },
-  'converted': { color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', icon: '🏆', label: 'Converted' },
-  'lost': { color: 'bg-red-500/20 text-red-400 border-red-500/30', icon: '❌', label: 'Lost' },
-  'disqualified': { color: 'bg-gray-500/20 text-gray-400 border-gray-500/30', icon: '🚫', label: 'Disqualified' }
+  'new': { 
+    color: 'bg-blue-500/20 text-blue-400 border-blue-500/30', 
+    icon: '🆕', 
+    label: 'New',
+    description: 'Lead just entered the system'
+  },
+  'contacted': { 
+    color: 'bg-purple-500/20 text-purple-400 border-purple-500/30', 
+    icon: '📞', 
+    label: 'Contacted',
+    description: 'Initial contact has been made'
+  },
+  'qualified': { 
+    color: 'bg-green-500/20 text-green-400 border-green-500/30', 
+    icon: '✅', 
+    label: 'Qualified',
+    description: 'Lead meets our criteria'
+  },
+  'proposal': { 
+    color: 'bg-orange-500/20 text-orange-400 border-orange-500/30', 
+    icon: '📋', 
+    label: 'Proposal',
+    description: 'Proposal has been sent'
+  },
+  'negotiation': { 
+    color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30', 
+    icon: '🤝', 
+    label: 'Negotiation',
+    description: 'In negotiation phase'
+  },
+  'won': { 
+    color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', 
+    icon: '🏆', 
+    label: 'Won',
+    description: 'Successfully converted to client'
+  },
+  'lost': { 
+    color: 'bg-red-500/20 text-red-400 border-red-500/30', 
+    icon: '❌', 
+    label: 'Lost',
+    description: 'Opportunity was lost'
+  },
+  'archived': { 
+    color: 'bg-gray-500/20 text-gray-400 border-gray-500/30', 
+    icon: '📁', 
+    label: 'Archived',
+    description: 'No longer active'
+  }
 }
 
 export default function StatusSelector({ leadId, currentStatus, onStatusChange }: StatusSelectorProps) {
@@ -40,18 +78,46 @@ export default function StatusSelector({ leadId, currentStatus, onStatusChange }
 
   const handleSave = async () => {
     setSaving(true)
-    const supabase = createClient()
     
-    const { error } = await supabase
-      .from('leads')
-      .update({ lead_status: selectedStatus })
-      .eq('id', leadId)
+    try {
+      const supabase = createClient()
+      
+      const { error } = await supabase
+        .from('leads')
+        .update({ 
+          lead_status: selectedStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', leadId)
 
-    setSaving(false)
-    
-    if (!error) {
+      if (error) {
+        console.error('Error updating status:', error)
+        toast({
+          title: "Error",
+          description: "Failed to update lead status",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Update parent component
       onStatusChange(selectedStatus)
       setHasChanges(false)
+      
+      toast({
+        title: "Status Updated",
+        description: `Lead status changed to ${statusConfig[selectedStatus]?.label}`,
+      })
+      
+    } catch (error) {
+      console.error('Error updating status:', error)
+      toast({
+        title: "Error",
+        description: "Failed to update lead status",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -79,10 +145,10 @@ export default function StatusSelector({ leadId, currentStatus, onStatusChange }
         <div className="flex items-center space-x-3">
           <Select value={selectedStatus} onValueChange={handleStatusSelect}>
             <SelectTrigger 
-              className={`husig-select transition-all duration-200 ${
+              className={`bg-gray-800/50 border-gray-600 text-white transition-all duration-200 ${
                 hasChanges 
                   ? 'border-husig-purple-500 ring-1 ring-husig-purple-500/20 bg-husig-purple-500/5' 
-                  : 'border-gray-600'
+                  : 'border-gray-600 hover:border-gray-500'
               }`}
             >
               <SelectValue />
@@ -94,9 +160,12 @@ export default function StatusSelector({ leadId, currentStatus, onStatusChange }
                   value={status}
                   className="text-white hover:bg-gray-700 focus:bg-gray-700"
                 >
-                  <div className="flex items-center space-x-2">
-                    <span>{config.icon}</span>
-                    <span>{config.label}</span>
+                  <div className="flex items-center space-x-3">
+                    <span className="text-lg">{config.icon}</span>
+                    <div>
+                      <div className="font-medium">{config.label}</div>
+                      <div className="text-xs text-gray-400">{config.description}</div>
+                    </div>
                   </div>
                 </SelectItem>
               ))}
@@ -111,11 +180,11 @@ export default function StatusSelector({ leadId, currentStatus, onStatusChange }
               <div className="flex items-center space-x-2 text-sm">
                 <span className="text-gray-300">Status change:</span>
                 <Badge className={`${statusConfig[currentStatus]?.color || 'bg-gray-500/20 text-gray-400'} border text-xs`}>
-                  {statusConfig[currentStatus]?.label}
+                  {statusConfig[currentStatus]?.icon} {statusConfig[currentStatus]?.label}
                 </Badge>
                 <ArrowRight className="w-4 h-4 text-husig-purple-400" />
                 <Badge className={`${statusConfig[selectedStatus]?.color || 'bg-gray-500/20 text-gray-400'} border text-xs`}>
-                  {statusConfig[selectedStatus]?.label}
+                  {statusConfig[selectedStatus]?.icon} {statusConfig[selectedStatus]?.label}
                 </Badge>
               </div>
             </div>
