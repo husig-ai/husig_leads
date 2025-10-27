@@ -1,23 +1,24 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import * as z from 'zod'
+import { z } from 'zod'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
-import { Loader2, Eye, EyeOff, AlertCircle, ArrowRight } from 'lucide-react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Loader2, AlertCircle, CheckCircle, Mail } from 'lucide-react'
 import Link from 'next/link'
 
 const signupSchema = z.object({
+  full_name: z.string().min(2, 'Full name must be at least 2 characters'),
   email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  confirmPassword: z.string().min(6, 'Password must be at least 6 characters'),
-  full_name: z.string().min(2, 'Full name is required'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  confirmPassword: z.string()
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -26,14 +27,14 @@ const signupSchema = z.object({
 type SignupForm = z.infer<typeof signupSchema>
 
 export default function SignupPage() {
-  const [loading, setLoading] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteToken, setInviteToken] = useState('')
-  const [error, setError] = useState('')
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
+  const [inviteToken, setInviteToken] = useState<string | null>(null)
+  const [tokenValid, setTokenValid] = useState<boolean | null>(null)
+  const [checkingToken, setCheckingToken] = useState(true)
 
   const {
     register,
@@ -45,24 +46,68 @@ export default function SignupPage() {
   })
 
   useEffect(() => {
-    // Get token from URL params
     const token = searchParams.get('token')
-    if (token) {
-      setInviteToken(token)
-      // If there's an email in the URL, prefill it
-      const email = searchParams.get('email')
-      if (email) {
-        setInviteEmail(email)
-        setValue('email', email)
-      }
-    } else {
-      // No token, redirect to login with error
+    
+    if (!token) {
       setError('Invalid invitation link. Please use a valid invitation link.')
+      setTokenValid(false)
+      setCheckingToken(false)
       setTimeout(() => {
         router.replace('/login')
       }, 3000)
+      return
     }
-  }, [searchParams, setValue, router])
+
+    setInviteToken(token)
+    
+    // Validate the invitation token
+    validateInvitationToken(token)
+  }, [searchParams, router])
+
+  const validateInvitationToken = async (token: string) => {
+    try {
+      setCheckingToken(true)
+      const supabase = createClient()
+      
+      // Check if the token exists in any profile
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('invitation_token, email, full_name, role, is_approved')
+        .eq('invitation_token', token)
+        .single()
+
+      if (error || !profile) {
+        setError('Invalid or expired invitation link. Please contact your administrator for a new invitation.')
+        setTokenValid(false)
+        return
+      }
+
+      if (profile.is_approved) {
+        setError('This invitation has already been used. Please try logging in instead.')
+        setTokenValid(false)
+        setTimeout(() => {
+          router.replace('/login')
+        }, 3000)
+        return
+      }
+
+      // Pre-fill the email if available
+      if (profile.email) {
+        setValue('email', profile.email)
+      }
+      if (profile.full_name) {
+        setValue('full_name', profile.full_name)
+      }
+
+      setTokenValid(true)
+    } catch (err: any) {
+      console.error('Error validating invitation token:', err)
+      setError('Unable to validate invitation. Please try again later.')
+      setTokenValid(false)
+    } finally {
+      setCheckingToken(false)
+    }
+  }
 
   const onSubmit = async (data: SignupForm) => {
     if (!inviteToken) {
@@ -89,12 +134,26 @@ export default function SignupPage() {
       })
 
       if (signupError) {
+        // Handle specific error cases
+        if (signupError.message.includes('User already registered')) {
+          setError('An account with this email already exists. Please try logging in instead.')
+          return
+        }
+        
+        if (signupError.message.includes('Unauthorized signup')) {
+          setError('Invalid invitation. Please contact your administrator for a new invitation.')
+          return
+        }
+        
         throw signupError
       }
 
       if (authData.user) {
-        // Redirect to pending approval or login
-        router.replace('/pending-approval')
+        setSuccess(true)
+        // Don't redirect immediately, show success message first
+        setTimeout(() => {
+          router.replace('/pending-approval')
+        }, 2000)
       }
     } catch (error: any) {
       console.error('Signup error:', error)
@@ -104,198 +163,172 @@ export default function SignupPage() {
     }
   }
 
-  return (
-    <div className="min-h-screen bg-husig-dark flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center mb-6">
-            <div className="w-12 h-12 bg-gradient-to-r from-husig-blue-500 to-husig-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-xl">H</span>
-            </div>
-            <span className="ml-3 text-2xl font-bold text-white">HuSig</span>
-          </div>
-          <h1 className="text-3xl font-bold text-white mb-2">
-            Complete Your Signup
-          </h1>
-          <p className="text-gray-400">
-            Create your account to access HuSig Analytics
-          </p>
-        </div>
+  if (checkingToken) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="w-full max-w-md">
+          <CardContent className="flex flex-col items-center justify-center p-8">
+            <Loader2 className="h-8 w-8 animate-spin mb-4" />
+            <p className="text-muted-foreground text-center">
+              Validating your invitation...
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
-        <Card className="card-husig-glass border-gray-700/50">
-          <CardHeader>
-            <CardTitle className="text-xl font-semibold text-white text-center">
-              Create Account
+  if (tokenValid === false) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="flex items-center justify-center gap-2">
+              <AlertCircle className="h-6 w-6 text-red-500" />
+              Invalid Invitation
             </CardTitle>
           </CardHeader>
-
-          <form onSubmit={handleSubmit(onSubmit)}>
-            <CardContent className="space-y-4">
-              {/* Error Display */}
-              {error && (
-                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
-                  <p className="text-red-400 text-sm">{error}</p>
-                </div>
-              )}
-
-              {/* Full Name */}
-              <div className="space-y-2">
-                <Label htmlFor="full_name" className="text-sm font-medium text-gray-300">
-                  Full Name
-                </Label>
-                <Input
-                  id="full_name"
-                  type="text"
-                  {...register('full_name')}
-                  className="husig-input"
-                  placeholder="Enter your full name"
-                  disabled={loading}
-                />
-                {errors.full_name && (
-                  <p className="text-sm text-red-400">{errors.full_name.message}</p>
-                )}
-              </div>
-
-              {/* Email */}
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium text-gray-300">
-                  Email Address
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  {...register('email')}
-                  className="husig-input"
-                  placeholder="Enter your email"
-                  disabled={loading || !!inviteEmail}
-                />
-                {errors.email && (
-                  <p className="text-sm text-red-400">{errors.email.message}</p>
-                )}
-                {inviteEmail && (
-                  <p className="text-xs text-blue-400">This email was pre-filled from your invitation</p>
-                )}
-              </div>
-
-              {/* Password */}
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-sm font-medium text-gray-300">
-                  Password
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    {...register('password')}
-                    className="husig-input pr-12"
-                    placeholder="Create a password"
-                    disabled={loading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300"
-                    disabled={loading}
-                  >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-                {errors.password && (
-                  <p className="text-sm text-red-400">{errors.password.message}</p>
-                )}
-              </div>
-
-              {/* Confirm Password */}
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-300">
-                  Confirm Password
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="confirmPassword"
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    {...register('confirmPassword')}
-                    className="husig-input pr-12"
-                    placeholder="Confirm your password"
-                    disabled={loading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300"
-                    disabled={loading}
-                  >
-                    {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-                {errors.confirmPassword && (
-                  <p className="text-sm text-red-400">{errors.confirmPassword.message}</p>
-                )}
-              </div>
-            </CardContent>
-            
-            <CardFooter className="flex flex-col space-y-4 pt-6">
-              <Button 
-                type="submit" 
-                className="w-full btn-husig-primary h-12 text-base font-semibold"
-                disabled={loading}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Creating Account...
-                  </>
-                ) : (
-                  <>
-                    Create Account
-                    <ArrowRight className="w-5 h-5 ml-2" />
-                  </>
-                )}
-              </Button>
-              
-              {/* Information about account access */}
-              <div className="w-full">
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-gray-700" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-gray-800 px-2 text-gray-500">Account Status</span>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Account Information */}
-              <div className="w-full bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-lg p-4">
-                <div className="flex items-start space-x-3">
-                  <AlertCircle className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
-                  <div className="text-sm">
-                    <p className="text-blue-200 font-medium mb-1">Account Approval Required</p>
-                    <p className="text-blue-100 text-xs mb-2">
-                      After creating your account, an administrator will review and approve your access.
-                    </p>
-                    <div className="space-y-1">
-                      <Link 
-                        href="/login" 
-                        className="text-husig-purple-400 hover:text-husig-purple-300 font-medium text-xs block"
-                      >
-                        Already have an account? Sign in →
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardFooter>
-          </form>
+          <CardContent className="space-y-4">
+            <Alert className="border-red-500">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                {error}
+              </AlertDescription>
+            </Alert>
+            <div className="text-center">
+              <Link href="/login">
+                <Button variant="outline" className="w-full">
+                  Go to Login
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
         </Card>
-
-        {/* Footer */}
-        <div className="text-center mt-8 text-sm text-gray-500">
-          <p>&copy; 2024 HuSig.ai. All rights reserved.</p>
-          <p className="mt-1 text-husig-blue-400">Data, LLM & AI Solutions at Scale</p>
-        </div>
       </div>
+    )
+  }
+
+  if (success) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="flex items-center justify-center gap-2">
+              <CheckCircle className="h-6 w-6 text-green-500" />
+              Account Created Successfully
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert className="border-green-500">
+              <CheckCircle className="h-4 w-4" />
+              <AlertDescription>
+                Your account has been created successfully! Please wait for an administrator to approve your access.
+              </AlertDescription>
+            </Alert>
+            <div className="text-center text-sm text-muted-foreground">
+              Redirecting to approval status page...
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle>Create Your Account</CardTitle>
+          <CardDescription>
+            Complete your registration to join the team
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            {error && (
+              <Alert className="border-red-500">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="full_name">Full Name</Label>
+              <Input
+                id="full_name"
+                {...register('full_name')}
+                placeholder="Enter your full name"
+                disabled={loading}
+              />
+              {errors.full_name && (
+                <p className="text-sm text-red-500">{errors.full_name.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Email Address</Label>
+              <Input
+                id="email"
+                type="email"
+                {...register('email')}
+                placeholder="Enter your email address"
+                disabled={loading}
+              />
+              {errors.email && (
+                <p className="text-sm text-red-500">{errors.email.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                {...register('password')}
+                placeholder="Create a secure password"
+                disabled={loading}
+              />
+              {errors.password && (
+                <p className="text-sm text-red-500">{errors.password.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                {...register('confirmPassword')}
+                placeholder="Confirm your password"
+                disabled={loading}
+              />
+              {errors.confirmPassword && (
+                <p className="text-sm text-red-500">{errors.confirmPassword.message}</p>
+              )}
+            </div>
+
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Creating Account...
+                </>
+              ) : (
+                'Create Account'
+              )}
+            </Button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              Already have an account?{' '}
+              <Link href="/login" className="text-primary hover:underline">
+                Sign in here
+              </Link>
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
