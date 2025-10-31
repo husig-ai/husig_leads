@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@/li'
 import { Lead, LeadStatus } from '@/types/database'
 import { DashboardHeader } from '@/components/layout/DashboardHeader'
 import { LeadScoreBadge } from '@/components/leads/LeadScoreBadge'
